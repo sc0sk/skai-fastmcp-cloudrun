@@ -1,11 +1,11 @@
 <!--
 Sync Impact Report:
-Version: 2.3.0 → 2.4.0
-Modified Principles: Added MCP Inspector testing standards, Interactive debugging requirements
-Added Sections: MCP Inspector usage (UI and CLI modes), Server connection types (stdio/SSE/HTTP), Inspector security model, fastmcp dev command integration, Interactive testing workflows, CLI-based automated testing
+Version: 2.4.0 → 2.5.0
+Modified Principles: Added project-specific Speech RAG architecture requirements
+Added Sections: Speech RAG Server architecture (Google Cloud), Vector database standards (Qdrant), Speech processing pipeline, Metadata schema, Hybrid search implementation, Capacity planning, Infrastructure specifications
 Removed Sections: None
 Templates Requiring Updates: ⚠ pending - plan-template.md, spec-template.md, tasks-template.md
-Follow-up TODOs: Create deployment scripts, setup Cloud Build CI/CD, configure ngrok for dev, generate MCP JSON configs, implement Redis for production token storage, create fastmcp.json config for this project, configure caching middleware for production, document MCP Inspector testing workflows
+Follow-up TODOs: Create fastmcp.json, design database schemas, implement speech ingestion pipeline, build MCP RAG tools, setup Cloud infrastructure (Redis, Qdrant, PostgreSQL), create deployment scripts
 -->
 
 # skai-fastmcp-cloudrun Constitution
@@ -2170,6 +2170,372 @@ if __name__ == "__main__":
      --port=8080
    ```
 
+## Project-Specific: Speech RAG Server Architecture
+
+### Project Overview
+
+This project implements a **Retrieval-Augmented Generation (RAG) server** for searching and analyzing speeches with rich metadata using FastMCP on Google Cloud Run.
+
+**Primary Use Case**: Enable AI assistants (Claude, ChatGPT, Cursor) to search, retrieve, and analyze historical speeches with semantic understanding and metadata filtering.
+
+### Architecture Decision (NON-NEGOTIABLE)
+
+The following architecture is the **official standard** for this project:
+
+**Technology Stack**:
+- **Compute**: Google Cloud Run (FastMCP server)
+- **Vector Database**: Qdrant Cloud (managed)
+- **Cache**: Cloud Memorystore for Redis
+- **Relational DB**: Cloud SQL for PostgreSQL
+- **Secrets**: Google Secret Manager
+- **CI/CD**: Cloud Build + Artifact Registry
+- **Embeddings**: sentence-transformers/all-MiniLM-L6-v2 (384 dimensions)
+
+**Monthly Cost Target**: $70-80/month (within Google Cloud credits)
+
+**Rationale**: Hybrid architecture (Google Cloud + Qdrant) provides optimal cost/performance for metadata-rich speech corpus with HNSW vector search and distributed caching.
+
+### Infrastructure Specifications
+
+#### 1. Cloud Run (FastMCP Server)
+
+```yaml
+Configuration:
+  CPU: 1 vCPU
+  Memory: 2 GB (for embedding model in-memory)
+  Min instances: 0 (scale to zero)
+  Max instances: 10
+  Concurrency: 80 requests/container
+  Timeout: 300s (5 minutes)
+  Region: us-central1
+Cost: ~$15-25/month
+```
+
+**Justification**: 2GB memory required to load sentence-transformers model in-memory for fast inference without external API calls.
+
+#### 2. Qdrant Cloud (Vector Database)
+
+```yaml
+Configuration:
+  Tier: Free (1GB) → Paid ($25/month for 5GB)
+  Index: HNSW with quantization
+  Vectors: 1M (free) → 5M (paid)
+  Dimensions: 384 (all-MiniLM-L6-v2)
+  Connection: gRPC over internet (TLS)
+  Metadata filtering: Enabled
+Cost: FREE → $25/month
+Capacity: 50,000 speeches (free) → 250,000 speeches (paid)
+```
+
+**Justification**: Best-in-class metadata filtering for speeches (speaker, date, topic, event). Free tier sufficient for prototype. HNSW provides <50ms p95 search latency.
+
+#### 3. Cloud Memorystore for Redis
+
+```yaml
+Configuration:
+  Tier: Basic (non-HA)
+  Memory: 1 GB
+  Version: Redis 7.0
+  Network: Private IP (VPC)
+  Region: us-central1
+Cost: ~$36/month
+```
+
+**Justification**: Required for OAuth token persistence across Cloud Run instances. Provides response caching for frequent queries (TTL-based).
+
+#### 4. Cloud SQL for PostgreSQL
+
+```yaml
+Configuration:
+  Instance: db-f1-micro (shared CPU, 0.6GB RAM)
+  Storage: 10GB SSD
+  Version: PostgreSQL 15
+  Backups: Automated daily
+  High Availability: No (add in production: +$50/month)
+  Region: us-central1
+Cost: ~$10/month
+```
+
+**Justification**: Stores full speech texts (too large for Qdrant payload), relational metadata, speaker/event relationships. Backup vector search via pgvector extension.
+
+#### 5. VPC Networking
+
+```yaml
+Configuration:
+  Serverless VPC Access Connector:
+    Throughput: 200-300 Mbps
+    IP Range: 10.8.0.0/28
+    Region: us-central1
+Cost: ~$10/month
+```
+
+**Justification**: Required for Cloud Run → Redis private IP communication.
+
+#### 6. Secrets & CI/CD
+
+```yaml
+Secret Manager:
+  - GITHUB_CLIENT_ID
+  - GITHUB_CLIENT_SECRET
+  - JWT_SIGNING_KEY
+  - TOKEN_ENCRYPTION_KEY
+  - QDRANT_API_KEY
+  - QDRANT_URL
+  - REDIS_PASSWORD
+  - DATABASE_URL
+Cost: <$1/month
+
+Cloud Build + Artifact Registry:
+  Free tier: 120 build-minutes/day
+Cost: FREE
+```
+
+### Speech Processing Pipeline Standards
+
+#### Chunking Strategy (NON-NEGOTIABLE)
+
+```python
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+splitter = RecursiveCharacterTextSplitter(
+    chunk_size=800,        # ~2-3 paragraphs per chunk
+    chunk_overlap=150,     # 15-20% overlap for context preservation
+    separators=["\n\n", "\n", ". ", " ", ""],  # Semantic boundaries
+    length_function=len,
+)
+```
+
+**Rationale** (based on 2025 RAG best practices):
+- 800 chars preserves speech context (complete thoughts)
+- 150 char overlap prevents losing meaning at boundaries
+- Semantic separators maintain speech structure
+
+#### Embedding Model (NON-NEGOTIABLE)
+
+```python
+from sentence_transformers import SentenceTransformer
+
+model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+# Dimensions: 384
+# Speed: ~50ms per chunk on 1 vCPU
+# Quality: Optimized for semantic similarity
+```
+
+**Alternative** (if quality issues): `BAAI/bge-large-en-v1.5` (1024 dims, slower but better quality)
+
+#### Metadata Schema (NON-NEGOTIABLE)
+
+```python
+speech_metadata = {
+    # Core identification
+    "speech_id": str,           # UUID v4
+    "title": str,               # Speech title
+    "speaker": str,             # Speaker name
+    "date": str,                # ISO 8601 (YYYY-MM-DD)
+
+    # Context
+    "event": Optional[str],     # "State of the Union", "Inaugural Address"
+    "location": Optional[str],  # "Washington, DC"
+    "audience": Optional[str],  # "Congress", "Public"
+    "topic_tags": List[str],    # ["economy", "healthcare", "foreign_policy"]
+
+    # Speech structure
+    "chunk_index": int,         # Position in speech (0-based)
+    "total_chunks": int,        # Total chunks for this speech
+    "section": Optional[str],   # "introduction", "body", "conclusion"
+
+    # Quality/metrics
+    "word_count": int,
+    "sentiment": Optional[float],     # -1.0 to 1.0 (optional analysis)
+    "key_phrases": Optional[List[str]],  # Extracted topics
+
+    # Source
+    "source_url": Optional[str],
+    "transcript_quality": str,  # "verbatim", "edited", "summary"
+}
+```
+
+**Storage Distribution**:
+- **Qdrant**: `chunk_text`, `embedding`, `speech_id`, `speaker`, `date`, `topic_tags`, `chunk_index`
+- **PostgreSQL**: Full speech text, all metadata, relational tables (speakers, events, topics)
+
+### MCP Tools Specification
+
+The following tools MUST be implemented as core functionality:
+
+#### 1. Hybrid Search (Primary Tool)
+
+```python
+@mcp.tool(tags=["search", "rag", "stable"])
+async def search_speeches(
+    query: str,
+    speaker: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    topics: Optional[List[str]] = None,
+    top_k: int = 10,
+    ctx: Context = None
+) -> List[SpeechResult]:
+    """
+    Hybrid search combining semantic similarity with metadata filtering.
+
+    Uses vector search (Qdrant HNSW) + metadata filters + Redis caching.
+    """
+```
+
+#### 2. Get Speech by ID
+
+```python
+@mcp.tool(tags=["retrieve", "rag", "stable"], readOnlyHint=True)
+async def get_speech(
+    speech_id: str,
+    include_context: bool = False,
+    ctx: Context = None
+) -> SpeechDetail:
+    """
+    Retrieve complete speech by ID with optional surrounding context.
+    """
+```
+
+#### 3. Metadata Filtering
+
+```python
+@mcp.tool(tags=["filter", "metadata", "stable"], readOnlyHint=True)
+async def filter_speeches(
+    speaker: Optional[str] = None,
+    event: Optional[str] = None,
+    date_range: Optional[Tuple[str, str]] = None,
+    topics: Optional[List[str]] = None,
+    limit: int = 50
+) -> List[SpeechMetadata]:
+    """
+    Filter speeches by metadata without semantic search.
+    """
+```
+
+#### 4. List Speakers
+
+```python
+@mcp.tool(tags=["metadata", "stable"], readOnlyHint=True)
+async def list_speakers(
+    limit: int = 100
+) -> List[Speaker]:
+    """
+    List all speakers with speech counts.
+    """
+```
+
+#### 5. Semantic Search (Advanced)
+
+```python
+@mcp.tool(tags=["search", "advanced", "beta"])
+async def semantic_search(
+    text: str,
+    similarity_threshold: float = 0.7,
+    top_k: int = 20,
+    rerank: bool = False
+) -> List[SpeechResult]:
+    """
+    Pure semantic vector search without metadata filtering.
+    Optional cross-encoder reranking for higher quality.
+    """
+```
+
+### Data Flow Architecture
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ INGESTION PIPELINE (One-time or scheduled)                   │
+└──────────────────────────────────────────────────────────────┘
+Speech Text (raw)
+   │
+   ├─> RecursiveCharacterTextSplitter (800 chars, 150 overlap)
+   │   └─> Chunks with position metadata
+   │
+   ├─> sentence-transformers/all-MiniLM-L6-v2
+   │   └─> Embeddings (384 dimensions)
+   │
+   ├─> Metadata Extraction & Validation (Pydantic)
+   │   └─> {speaker, date, topic_tags, event, etc.}
+   │
+   └─> Parallel Storage:
+       ├─> Qdrant.upsert({embedding, chunk_text, metadata})
+       └─> PostgreSQL.insert({full_text, metadata, relations})
+
+┌──────────────────────────────────────────────────────────────┐
+│ SEARCH REQUEST FLOW (Real-time)                              │
+└──────────────────────────────────────────────────────────────┘
+MCP Client (Claude/Cursor/ChatGPT)
+   │
+   └─> FastMCP Server (Cloud Run)
+       │
+       ├─> Redis Cache Check
+       │   ├─> HIT: Return cached results (<10ms)
+       │   └─> MISS: Continue to vector search
+       │
+       ├─> Generate Query Embedding
+       │   └─> sentence-transformers (in-memory, ~50ms)
+       │
+       ├─> Qdrant Hybrid Search
+       │   ├─> Vector similarity (HNSW index, <50ms)
+       │   ├─> Metadata filtering (speaker, date, topics)
+       │   └─> Top-K results with scores
+       │
+       ├─> PostgreSQL Enrichment (optional)
+       │   └─> Full speech text, additional context
+       │
+       ├─> Cache Results in Redis (TTL: 300s)
+       │
+       └─> Return MCP Response
+           └─> Structured results with citations
+```
+
+### Capacity Planning
+
+| Scale | Speeches | Chunks | Vectors | Qdrant Tier | PostgreSQL | Monthly Cost |
+|-------|----------|--------|---------|-------------|------------|--------------|
+| **Prototype** | 1,000 | 15,000 | 15,000 | Free (1GB) | 10GB | ~$47/month |
+| **Production v1** | 10,000 | 150,000 | 150,000 | Paid (5GB) | 20GB | ~$72/month |
+| **Scale** | 100,000 | 1.5M | 1.5M | Paid (20GB) | 50GB | ~$180/month |
+
+**Current Target**: Production v1 (10,000 speeches)
+
+### Performance Requirements
+
+- **Search Latency**: <100ms p95 (uncached), <20ms p95 (cached)
+- **Embedding Generation**: <100ms per chunk
+- **Availability**: 99.5% (Cloud Run SLA)
+- **Concurrent Users**: 10-50 (auto-scaling)
+- **Cache Hit Rate**: >60% for common queries
+
+### Testing Requirements (Speech RAG Specific)
+
+In addition to standard FastMCP testing, the following MUST be tested:
+
+1. **Search Quality Tests**:
+   - Semantic similarity accuracy (manual golden dataset)
+   - Metadata filtering correctness
+   - Ranking quality (top results relevance)
+   - Edge cases (empty queries, malformed filters)
+
+2. **Performance Tests**:
+   - Search latency (p50, p95, p99)
+   - Embedding generation speed
+   - Cache hit rates
+   - Concurrent request handling
+
+3. **Data Pipeline Tests**:
+   - Chunking boundary preservation
+   - Embedding consistency
+   - Metadata extraction accuracy
+   - Duplicate detection
+
+4. **Integration Tests**:
+   - End-to-end ingestion → search
+   - Multi-filter combinations
+   - MCP client compatibility (Claude, Cursor)
+   - OAuth flow with GitHub
+
 ## Governance
 
 This constitution supersedes all other development practices and documentation.
@@ -2199,4 +2565,4 @@ Constitution changes MUST be tracked in git with clear commit messages:
 - Include sync impact report in PR description
 - Tag constitutional releases
 
-**Version**: 2.4.0 | **Ratified**: 2025-10-21 | **Last Amended**: 2025-10-21
+**Version**: 2.5.0 | **Ratified**: 2025-10-21 | **Last Amended**: 2025-10-21
