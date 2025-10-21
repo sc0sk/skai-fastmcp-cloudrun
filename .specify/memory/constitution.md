@@ -2,9 +2,9 @@
 Sync Impact Report:
 Version: 2.5.0 → 2.6.0
 Modified Principles: Adopted Google ADK-aligned architecture (LangChain + Vertex AI + Cloud SQL pgvector)
-Added Sections: Google ADK rationale, Vertex AI embeddings (768-dim), LangChain integration patterns, Full text retrieval from PostgreSQL, Dual-table schema (speeches + speech_chunks)
-Removed Sections: Qdrant Cloud architecture, sentence-transformers local embeddings, Direct pgvector integration
-Changed Dependencies: Added LangChain (langchain-google-vertexai, langchain-google-cloud-sql-pg), Added Vertex AI embeddings, Removed sentence-transformers
+Added Sections: Google ADK rationale, Vertex AI embeddings (text-embedding-004, 768-dim), LangChain integration patterns, Full text retrieval from PostgreSQL, Dual-table schema (speeches + speech_chunks)
+Removed Sections: Qdrant Cloud architecture, sentence-transformers local embeddings, Direct pgvector integration, gemini-embedding-001 (3072-dim incompatible with pgvector HNSW limit)
+Changed Dependencies: Added LangChain (langchain-google-vertexai, langchain-google-cloud-sql-pg), Added Vertex AI text-embedding-004 (768-dim), Removed sentence-transformers
 Templates Requiring Updates: ⚠ pending - plan-template.md, spec-template.md, tasks-template.md, fastmcp.json
 Follow-up TODOs: Create fastmcp.json with LangChain deps, update database schemas (768-dim vectors), implement speech ingestion with Vertex AI, build MCP RAG tools with full text retrieval, setup Cloud infrastructure (Redis, Cloud SQL pgvector), create deployment scripts
 -->
@@ -2222,7 +2222,7 @@ This architecture follows Google's Agent Development Kit (ADK) patterns, which u
 **Technology Stack**:
 - **Compute**: Google Cloud Run (FastMCP server)
 - **Vector Database**: Cloud SQL PostgreSQL with pgvector extension (v0.8.0)
-- **Embeddings**: Vertex AI gemini-embedding-001 (768 dimensions, scalable to 3072)
+- **Embeddings**: Vertex AI text-embedding-004 (768 dimensions, configurable 1-768)
 - **Framework**: LangChain (Google ADK standard)
 - **Cache**: Cloud Memorystore for Redis
 - **Secrets**: Google Secret Manager
@@ -2262,7 +2262,7 @@ This architecture follows Google's Agent Development Kit (ADK) patterns, which u
    - ACID transactions across all data
 
 4. **Superior Embeddings** ✅
-   - Vertex AI gemini-embedding-001 (768+ dims) vs sentence-transformers (384 dims)
+   - Vertex AI text-embedding-004 (768 dims) vs sentence-transformers (384 dims)
    - Higher quality semantic search
    - Native Google Cloud integration
    - No container memory overhead (API-based)
@@ -2321,7 +2321,7 @@ Configuration:
   Storage: 20GB SSD
   Version: PostgreSQL 15
   Extensions: vector (pgvector 0.8.0)
-  Dimensions: 768 (Vertex AI gemini-embedding-001)
+  Dimensions: 768 (Vertex AI text-embedding-004)
   Index: HNSW (m=16, ef_construction=64)
   Backups: Automated daily
   High Availability: No (add in production: +$50/month)
@@ -2563,7 +2563,7 @@ async def get_speech_full_text(
 
 **Key Features**:
 1. ✅ **LangChain Integration**: Uses `langchain-google-vertexai` + `langchain-google-cloud-sql-pg`
-2. ✅ **Vertex AI Embeddings**: 768-dim gemini-embedding-001 (state-of-the-art quality)
+2. ✅ **Vertex AI Embeddings**: 768-dim text-embedding-004 (configurable dimensionality, production-ready)
 3. ✅ **Full Text Retrieval**: `search_speeches` returns both chunk excerpt AND complete speech
 4. ✅ **Hybrid Search**: Vector similarity + metadata filtering (party, chamber, topics)
 5. ✅ **Google ADK Aligned**: Follows Google's agent development patterns
@@ -2649,7 +2649,7 @@ query_embeddings = VertexAIEmbeddings(
 ```
 
 **Rationale**:
-- **Model**: gemini-embedding-001 is Google's state-of-the-art embedding model (2025)
+- **Model**: text-embedding-004 supports configurable dimensionality (1-768) and task-specific embeddings
 - **Political Discourse**: Superior performance on classification, sentiment, and complex institutional language
 - **Task Types**: RETRIEVAL_DOCUMENT for ingestion, RETRIEVAL_QUERY for search (optimizes embeddings for each use case)
 - **Dimensions**: 768-dim balances performance/storage; scalable to 3072-dim without cost increase
@@ -2788,7 +2788,7 @@ Speech Text (raw)
    ├─> RecursiveCharacterTextSplitter (800 chars, 150 overlap)
    │   └─> Chunks with position metadata
    │
-   ├─> Vertex AI gemini-embedding-001
+   ├─> Vertex AI text-embedding-004
    │   └─> Embeddings (768 dimensions)
    │
    ├─> Metadata Extraction & Validation (Pydantic)
@@ -2810,7 +2810,7 @@ MCP Client (Claude/Cursor/ChatGPT)
        │   └─> MISS: Continue to vector search
        │
        ├─> Generate Query Embedding
-       │   └─> Vertex AI gemini-embedding-001 (API call, ~50-100ms)
+       │   └─> Vertex AI text-embedding-004 (API call, ~50-100ms)
        │
        ├─> Cloud SQL pgvector Hybrid Search
        │   ├─> Vector similarity (HNSW index, 100-200ms)

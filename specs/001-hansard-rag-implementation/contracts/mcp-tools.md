@@ -171,7 +171,7 @@ async def search_speeches(
     await ctx.info(f"Searching for: {query}")
     await ctx.report_progress(0, 3)
 
-    # Generate query embedding (Vertex AI gemini-embedding-001)
+    # Generate query embedding (Vertex AI text-embedding-004)
     start_time = time.time()
     embedding = await query_embeddings.aembed_query(query)
     embedding_time_ms = (time.time() - start_time) * 1000

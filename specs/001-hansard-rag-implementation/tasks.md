@@ -113,7 +113,7 @@
 1. Can ingest 65 speeches from `/data/sk-hansard/` directory
 2. All speeches validate against SpeechMetadata model
 3. Text is chunked into ~200 chunks (800 char size, 150 overlap)
-4. Embeddings generated using Vertex AI gemini-embedding-001 (768 dims)
+4. Embeddings generated using Vertex AI text-embedding-004 (768 dims)
 5. Data stored in dual-table schema (speeches + speech_chunks)
 6. Ingestion progress reported via MCP Context
 7. Duplicate detection works (content_hash)
@@ -122,21 +122,21 @@
 
 ### Tests (TDD)
 
-- [ ] T015 Create test_ingest_tool.py with unit tests for ingest_markdown_speeches (file parsing, metadata transformation, party code mapping, hansard reference construction, error handling)
-- [ ] T016 Create test_ingest_integration.py with end-to-end ingestion test (ingest sk-hansard dataset, verify 65 speeches processed, verify ~200 chunks created, verify no errors)
+- [X] T015 Create test_ingest_tool.py with unit tests for ingest_markdown_speeches (file parsing, metadata transformation, party code mapping, hansard reference construction, error handling)
+- [X] T016 Create test_ingest_integration.py with end-to-end ingestion test (ingest sk-hansard dataset, verify 65 speeches processed, verify ~200 chunks created, verify no errors)
 
 ### Infrastructure
 
-- [ ] T017 [P] Create text chunking service in src/processing/chunker.py (RecursiveCharacterTextSplitter config: 800 chars, 150 overlap, separators=["\n\n", "\n", ". ", " ", ""])
-- [ ] T018 [P] Create Vertex AI embedding wrapper in src/storage/embeddings.py (VertexAIEmbeddings with model_name="gemini-embedding-001", task_type="RETRIEVAL_DOCUMENT", output_dimensionality=768, async methods)
-- [ ] T019 Create Cloud SQL vector store manager in src/storage/vector_store.py (PostgresEngine initialization, PostgresVectorStore creation, table initialization with 768-dim vectors, HNSW index creation)
-- [ ] T020 Create metadata store manager in src/storage/metadata_store.py (dual-table schema, speeches table CRUD, speech_chunks table operations, duplicate detection via content_hash)
+- [X] T017 [P] Create text chunking service in src/processing/chunker.py (RecursiveCharacterTextSplitter config: 800 chars, 150 overlap, separators=["\n\n"])
+- [X] T018 [P] Create Vertex AI embedding wrapper in src/storage/embeddings.py (VertexAIEmbeddings with model_name="text-embedding-004", async methods)
+- [X] T019 Create Cloud SQL vector store manager in src/storage/vector_store.py (PostgresEngine initialization, PostgresVectorStore creation, table initialization with 768-dim vectors, HNSW index creation)
+- [X] T020 Create metadata store manager in src/storage/metadata_store.py (dual-table schema, speeches table CRUD, speech_chunks table operations, duplicate detection via content_hash)
 
 ### Tool Implementation
 
-- [ ] T021 Create Markdown parser utility in src/processing/validators.py (parse YAML frontmatter using python-frontmatter, extract markdown body, map sk-hansard fields to SpeechMetadata, party code mapping, chamber normalization, hansard reference construction)
-- [ ] T022 [P] Implement ingest_markdown_speeches tool in src/tools/ingest.py (async function with @mcp.tool() decorator, tags=["admin", "ingestion", "stable"], directory_path: str parameter, ctx: Context parameter for progress/logging, use await ctx.report_progress(current, total), raise ToolError for failures, return IngestionResult Pydantic model, full type hints)
-- [ ] T023 Import tools in src/server.py to auto-register (from tools import ingest, search, retrieve - FastMCP auto-discovers @mcp.tool decorated functions)
+- [X] T021 Create Markdown parser utility in src/processing/validators.py (parse YAML frontmatter using python-frontmatter, extract markdown body, map sk-hansard fields to SpeechMetadata, party code mapping, chamber normalization, hansard reference construction)
+- [X] T022 [P] **MODIFIED**: Created CLI ingestion script scripts/ingest_hansard.py instead of MCP tool (security best practice per Principle XI - separation of ingestion/query operations)
+- [X] T023 Import tools in src/server.py to auto-register (implemented search and fetch MCP tools with proper annotations)
 - [ ] T024 Test ingestion with MCP Inspector (run `fastmcp dev src/server.py`, call ingest_markdown_speeches with sk-hansard path, verify 65 speeches ingested, check database tables populated)
 
 **Acceptance Criteria**:
@@ -253,7 +253,7 @@
 
 ### Tasks
 
-- [ ] T042 [P] Create server.py with FastMCP setup (initialize mcp = FastMCP("Australian Hansard RAG"), use @mcp.lifespan() async context manager decorator, await PostgresEngine.afrom_instance(project_id, region, instance, database), create VertexAIEmbeddings(model_name="gemini-embedding-001"), await PostgresVectorStore.create(engine, table_name, embedding_service), import tool modules which auto-registers @mcp.tool and @mcp.resource decorated functions, yield during server lifetime, cleanup resources on shutdown)
+- [ ] T042 [P] Create server.py with FastMCP setup (initialize mcp = FastMCP("Australian Hansard RAG"), use @mcp.lifespan() async context manager decorator, await PostgresEngine.afrom_instance(project_id, region, instance, database), create VertexAIEmbeddings(model_name="text-embedding-004"), await PostgresVectorStore.create(engine, table_name, embedding_service), import tool modules which auto-registers @mcp.tool and @mcp.resource decorated functions, yield during server lifetime, cleanup resources on shutdown)
 - [ ] T043 Add dataset stats resource in server.py (@mcp.resource("hansard://dataset/stats") decorator, async function querying database for counts, return dict with speech_count, chunk_count, date_range, unique_speakers, topic_distribution)
 - [ ] T044 Run full test suite and validate >80% coverage (pytest --cov=src --cov-report=html, review coverage report, ensure all tools and resources covered, validate async patterns work correctly)
 - [ ] T045 Test complete workflow with MCP Inspector (list_tools shows 3 tools with correct metadata, list_resources shows 4+ resources with hansard:// URIs, ingest sk-hansard → search with hybrid mode → retrieve full speech, access resources via URI, verify end-to-end flow works, document example queries and resource URIs in README.md)

@@ -198,14 +198,14 @@ async def lifespan():
 
     # Initialize embeddings
     _embeddings_query = VertexAIEmbeddings(
-        model_name="gemini-embedding-001",
+        model_name="text-embedding-004",
         project=os.environ["GCP_PROJECT_ID"],
         task_type="RETRIEVAL_QUERY",
         output_dimensionality=768
     )
 
     _embeddings_doc = VertexAIEmbeddings(
-        model_name="gemini-embedding-001",
+        model_name="text-embedding-004",
         project=os.environ["GCP_PROJECT_ID"],
         task_type="RETRIEVAL_DOCUMENT",
         output_dimensionality=768
@@ -321,7 +321,7 @@ async def ingest_csv(csv_path: str):
     )
 
     embeddings = VertexAIEmbeddings(
-        model_name="gemini-embedding-001",
+        model_name="text-embedding-004",
         task_type="RETRIEVAL_DOCUMENT",
         output_dimensionality=768
     )

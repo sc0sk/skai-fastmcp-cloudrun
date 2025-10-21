@@ -12,7 +12,7 @@ This document consolidates technical research for implementing the Australian Ha
 
 **Key Decisions**:
 1. **Vector Database**: Cloud SQL PostgreSQL + pgvector v0.8.0 (HNSW indexing, 768-dim vectors)
-2. **Embeddings**: Vertex AI gemini-embedding-001 (768 dimensions, task-specific)
+2. **Embeddings**: Vertex AI text-embedding-004 (768 dimensions, task-specific)
 3. **Framework**: LangChain async patterns (langchain-google-vertexai + langchain-google-cloud-sql-pg)
 4. **Architecture**: Global resource initialization with FastMCP lifespan management
 
@@ -157,7 +157,7 @@ from langchain_google_vertexai import VertexAIEmbeddings
 
 # Initialize embeddings
 embeddings = VertexAIEmbeddings(
-    model_name="gemini-embedding-001",
+    model_name="text-embedding-004",
     task_type="RETRIEVAL_DOCUMENT",  # For ingestion
     output_dimensionality=768
 )
@@ -229,7 +229,7 @@ async def search_speeches(query: str, ctx: Context = None) -> List[dict]:
 ## 3. Vertex AI Embeddings in Production
 
 ### Decision
-Use Vertex AI `gemini-embedding-001` with 768 dimensions, batch processing for ingestion, and robust error handling.
+Use Vertex AI `text-embedding-004` with 768 dimensions, batch processing for ingestion, and robust error handling.
 
 ### Rationale
 
@@ -302,7 +302,7 @@ async def batch_embed_speeches(speeches: List[dict], ctx: Context):
     # 2. Submit batch job
     batch_job = aiplatform.BatchPredictionJob.create(
         job_display_name=f"hansard-embeddings-{batch_id}",
-        model_name="publishers/google/models/gemini-embedding-001",
+        model_name="publishers/google/models/text-embedding-004",
         input_path=input_file,
         output_path=f"gs://{BUCKET}/batch-output/{batch_id}/"
     )
@@ -334,14 +334,14 @@ async def batch_embed_speeches(speeches: List[dict], ctx: Context):
 ```python
 # Document embeddings (for ingestion)
 embeddings_doc = VertexAIEmbeddings(
-    model_name="gemini-embedding-001",
+    model_name="text-embedding-004",
     task_type="RETRIEVAL_DOCUMENT",  # Optimized for documents
     output_dimensionality=768
 )
 
 # Query embeddings (for search)
 embeddings_query = VertexAIEmbeddings(
-    model_name="gemini-embedding-001",
+    model_name="text-embedding-004",
     task_type="RETRIEVAL_QUERY",  # Optimized for queries
     output_dimensionality=768
 )
@@ -356,8 +356,8 @@ embeddings_query = VertexAIEmbeddings(
 
 **Comparison**:
 - sentence-transformers: 384 dims (lower quality)
-- gemini-embedding-001: 768 dims (recommended start)
-- gemini-embedding-001 max: 3072 dims (best quality, same cost)
+- text-embedding-004: 768 dims (recommended start)
+- text-embedding-004 max: 3072 dims (best quality, same cost)
 
 ### Alternatives Considered
 
@@ -409,7 +409,7 @@ async def lifespan():
 
     # Startup: Initialize resources
     _embeddings = VertexAIEmbeddings(
-        model_name="gemini-embedding-001",
+        model_name="text-embedding-004",
         task_type="RETRIEVAL_QUERY",
         output_dimensionality=768
     )
@@ -523,7 +523,7 @@ async def embed_in_batches(
 | **Instance** | db-custom-2-7680 (2 vCPU, 7.5 GB) | Fits 10k-50k speeches in RAM, >99% cache hit | Baseline cost |
 | **HNSW Index** | m=24, ef_construction=100 | Optimized for 768-dim, better recall | 2-5 min build time |
 | **Connection** | Unix domain socket (Cloud Run → Cloud SQL) | Automatic encryption, recommended for Cloud Run | Free |
-| **Embeddings** | Vertex AI gemini-embedding-001 (768-dim) | State-of-the-art, Google ADK standard, native Cloud | $0.075-0.15 / 1M tokens |
+| **Embeddings** | Vertex AI text-embedding-004 (768-dim) | State-of-the-art, Google ADK standard, native Cloud | $0.075-0.15 / 1M tokens |
 | **Batch Processing** | Batch API for ingestion, sync for queries | 50% cost savings, handles rate limits | $2.25 vs $4.50 for 10k |
 | **Framework** | LangChain (async-first) | Google ADK aligned, battle-tested, native async | No cost |
 | **Architecture** | Global resources + lifespan management | Cloud Run concurrency, connection pooling, Context support | Cost savings (fewer containers) |

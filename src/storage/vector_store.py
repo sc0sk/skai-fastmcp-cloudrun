@@ -98,7 +98,7 @@ class VectorStoreService:
                 id_column="chunk_id",
                 content_column="chunk_text",
                 embedding_column="embedding",
-                metadata_columns=["speech_id", "chunk_index", "speaker", "party", "chamber", "state", "date", "hansard_reference"],
+                metadata_columns=["speech_id", "chunk_index", "chunk_size", "speaker", "party", "chamber", "state", "date", "hansard_reference"],
             )
 
         return self._vector_store
@@ -137,9 +137,14 @@ class VectorStoreService:
         if len(texts) != len(metadatas):
             raise ValueError("texts and metadatas must have same length")
 
-        # Add speech_id to all metadata dicts
+        # Add speech_id to all metadata dicts and ensure date is a date object
+        from datetime import date, datetime
         for meta in metadatas:
             meta["speech_id"] = speech_id
+
+            # Convert date string to date object if needed
+            if "date" in meta and isinstance(meta["date"], str):
+                meta["date"] = datetime.fromisoformat(meta["date"]).date()
 
         vector_store = await self._get_vector_store()
 

@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ingest_speech",
-  "description": "Ingest a single Australian Hansard speech: validate metadata, chunk text, generate embeddings (Vertex AI gemini-embedding-001), and store in Cloud SQL PostgreSQL + pgvector",
+  "description": "Ingest a single Australian Hansard speech: validate metadata, chunk text, generate embeddings (Vertex AI text-embedding-004), and store in Cloud SQL PostgreSQL + pgvector",
   "type": "object",
   "toolMetadata": {
     "tags": ["ingest", "write", "stable"],
@@ -142,7 +142,7 @@
       "embeddings_generated": {
         "type": "integer",
         "minimum": 0,
-        "description": "Number of 768-dimensional embeddings created via Vertex AI gemini-embedding-001"
+        "description": "Number of 768-dimensional embeddings created via Vertex AI text-embedding-004"
       },
       "total_time_ms": {
         "type": "number",
@@ -172,7 +172,7 @@
       "2. Duplicate check via content_hash (SHA-256)",
       "3. Insert into speeches table (Cloud SQL PostgreSQL)",
       "4. Text chunking (RecursiveCharacterTextSplitter: 800 chars, 150 overlap)",
-      "5. Embedding generation (Vertex AI gemini-embedding-001, task_type=RETRIEVAL_DOCUMENT, 768 dims)",
+      "5. Embedding generation (Vertex AI text-embedding-004, task_type=RETRIEVAL_DOCUMENT, 768 dims)",
       "6. Insert chunks into speech_chunks table with embeddings",
       "7. HNSW index automatically updated (m=24, ef_construction=100)"
     ]

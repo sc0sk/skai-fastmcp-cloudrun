@@ -53,25 +53,35 @@ cp .env.example .env
 # GCP_REGION=us-central1
 ```
 
-### Google Cloud Setup
+### Infrastructure Setup
+
+**📖 See [INFRASTRUCTURE_SETUP.md](INFRASTRUCTURE_SETUP.md) for detailed setup guide**
+
+**Quick Setup** (automated script):
 
 ```bash
-# Login to Google Cloud
+# 1. Login to Google Cloud
 gcloud auth login
 gcloud auth application-default login
 
-# Set project (already configured in .env.example)
+# 2. Set project
 export GCP_PROJECT_ID="skai-fastmcp-cloudrun"
 gcloud config set project $GCP_PROJECT_ID
 
-# Enable required APIs
-gcloud services enable aiplatform.googleapis.com
-gcloud services enable sqladmin.googleapis.com
-gcloud services enable run.googleapis.com
+# 3. Create Cloud SQL instance
+./scripts/setup-cloudsql.sh
 
-# Create Cloud SQL instance (if not exists)
-# See specs/001-hansard-rag-implementation/quickstart.md for detailed setup
+# 4. Complete database setup (interactive)
+./scripts/complete-setup.sh
 ```
+
+The automated script will:
+- ✅ Check psql client installation
+- ✅ Enable pgvector extension
+- ✅ Initialize database schema
+- ✅ Validate and ingest sample data
+
+**Estimated time**: 10-15 minutes
 
 ### Running Locally
 

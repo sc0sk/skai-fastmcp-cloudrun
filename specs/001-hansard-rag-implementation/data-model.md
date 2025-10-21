@@ -12,7 +12,7 @@
 This document defines the data model for the Australian Hansard RAG system, using Cloud SQL PostgreSQL with pgvector extension (768-dimensional vectors) per the constitution (v2.6.0) Google ADK-aligned architecture.
 
 **Database**: Cloud SQL PostgreSQL 15 with pgvector v0.8.0
-**Vector Dimensions**: 768 (Vertex AI gemini-embedding-001)
+**Vector Dimensions**: 768 (Vertex AI text-embedding-004)
 **Index Type**: HNSW (m=24, ef_construction=100)
 
 ---
@@ -121,7 +121,7 @@ CREATE TABLE speech_chunks (
     chunk_index INTEGER NOT NULL,  -- Position in speech (0-based)
     chunk_size INTEGER NOT NULL,   -- Character count
 
-    -- Vector embedding (768 dimensions from Vertex AI gemini-embedding-001)
+    -- Vector embedding (768 dimensions from Vertex AI text-embedding-004)
     embedding vector(768) NOT NULL,
 
     -- Metadata for filtering (denormalized for query performance)
@@ -434,7 +434,7 @@ CSV/JSON Input
    ├─> Text Chunking (RecursiveCharacterTextSplitter)
    │   └─> Generate chunks with overlap
    │
-   ├─> Generate Embeddings (Vertex AI gemini-embedding-001)
+   ├─> Generate Embeddings (Vertex AI text-embedding-004)
    │   ├─> Task type: RETRIEVAL_DOCUMENT
    │   ├─> Output dimensions: 768
    │   └─> Batch size: 10 chunks per API call
@@ -452,7 +452,7 @@ CSV/JSON Input
 ```
 User Query + Metadata Filters
    │
-   ├─> Generate Query Embedding (Vertex AI gemini-embedding-001)
+   ├─> Generate Query Embedding (Vertex AI text-embedding-004)
    │   ├─> Task type: RETRIEVAL_QUERY
    │   └─> Output dimensions: 768
    │
@@ -505,7 +505,7 @@ The MVP spec references ChromaDB + SQLite. Migration path to production schema:
 |-----------|-----------|---------------|
 | **Database** | Cloud SQL PostgreSQL 15 | db-custom-2-7680 (2 vCPU, 7.5 GB RAM) |
 | **Vector Extension** | pgvector v0.8.0 | HNSW index (m=24, ef_construction=100) |
-| **Vector Dimensions** | 768 | Vertex AI gemini-embedding-001 |
+| **Vector Dimensions** | 768 | Vertex AI text-embedding-004 |
 | **Tables** | 2 tables | `speeches` (full text + metadata), `speech_chunks` (vectors + chunks) |
 | **Relationships** | 1:N | One speech → Many chunks |
 | **Chunking** | RecursiveCharacterTextSplitter | 800 chars, 150 overlap |

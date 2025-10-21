@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "search_speeches",
-  "description": "Hybrid search combining semantic similarity (pgvector HNSW) with metadata filtering for Australian Hansard speeches. Uses Vertex AI gemini-embedding-001 (768-dim) for query embeddings and Cloud SQL PostgreSQL for vector search.",
+  "description": "Hybrid search combining semantic similarity (pgvector HNSW) with metadata filtering for Australian Hansard speeches. Uses Vertex AI text-embedding-004 (768-dim) for query embeddings and Cloud SQL PostgreSQL for vector search.",
   "type": "object",
   "toolMetadata": {
     "tags": ["search", "rag", "stable"],
@@ -200,7 +200,7 @@
   },
   "searchPipeline": {
     "steps": [
-      "1. Generate query embedding (Vertex AI gemini-embedding-001, task_type=RETRIEVAL_QUERY, 768 dims)",
+      "1. Generate query embedding (Vertex AI text-embedding-004, task_type=RETRIEVAL_QUERY, 768 dims)",
       "2. Build metadata filter (speaker, party, chamber, date range, topic_tags, state)",
       "3. Execute pgvector HNSW similarity search with cosine distance (hnsw.ef_search=40-80)",
       "4. Apply metadata filters via PostgreSQL WHERE clauses",

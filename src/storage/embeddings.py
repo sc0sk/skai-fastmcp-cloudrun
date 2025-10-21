@@ -1,18 +1,19 @@
-"""Vertex AI embedding service using gemini-embedding-001."""
+"""Vertex AI embedding service using text-embedding-004."""
 
-from langchain_google_vertexai import VertexAIEmbeddings
+from vertexai.language_models import TextEmbeddingModel, TextEmbeddingInput
+from google.cloud import aiplatform
 from typing import List
 import os
 
 
 class EmbeddingService:
-    """Service for generating embeddings using Vertex AI gemini-embedding-001."""
+    """Service for generating embeddings using Vertex AI text-embedding-004."""
 
     def __init__(
         self,
         project_id: str = None,
         location: str = None,
-        model_name: str = "gemini-embedding-001",
+        model_name: str = "text-embedding-004",
         task_type: str = "RETRIEVAL_DOCUMENT",
         output_dimensionality: int = 768,
     ):
@@ -22,7 +23,7 @@ class EmbeddingService:
         Args:
             project_id: GCP project ID (defaults to GCP_PROJECT_ID env var)
             location: Vertex AI location (defaults to VERTEX_AI_LOCATION env var)
-            model_name: Embedding model (default: gemini-embedding-001)
+            model_name: Embedding model (default: text-embedding-004)
             task_type: Task type for embeddings (default: RETRIEVAL_DOCUMENT)
             output_dimensionality: Vector dimensions (default: 768)
 
@@ -36,13 +37,11 @@ class EmbeddingService:
         self.task_type = task_type
         self.output_dimensionality = output_dimensionality
 
-        # Initialize LangChain VertexAIEmbeddings
-        # Note: task_type and output_dimensionality are not supported in current version
-        self.embeddings = VertexAIEmbeddings(
-            model_name=self.model_name,
-            project=self.project_id,
-            location=self.location,
-        )
+        # Initialize Vertex AI
+        aiplatform.init(project=self.project_id, location=self.location)
+
+        # Load the embedding model
+        self.model = TextEmbeddingModel.from_pretrained(self.model_name)
 
     async def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """
@@ -64,8 +63,17 @@ class EmbeddingService:
         if not texts:
             return []
 
-        # LangChain's aembed_documents for async batch embedding
-        return await self.embeddings.aembed_documents(texts)
+        # Create TextEmbeddingInput objects with task type
+        inputs = [TextEmbeddingInput(text=text, task_type=self.task_type) for text in texts]
+
+        # Generate embeddings with specified dimensionality
+        embeddings = self.model.get_embeddings(
+            inputs,
+            output_dimensionality=self.output_dimensionality
+        )
+
+        # Extract embedding vectors
+        return [embedding.values for embedding in embeddings]
 
     async def embed_query(self, text: str) -> List[float]:
         """
@@ -90,9 +98,17 @@ class EmbeddingService:
         if not text or not text.strip():
             raise ValueError("Query text cannot be empty")
 
-        # Use the same embeddings instance for queries
-        # Note: task_type differentiation not supported in current LangChain version
-        return await self.embeddings.aembed_query(text)
+        # Create input with RETRIEVAL_QUERY task type
+        inputs = [TextEmbeddingInput(text=text, task_type="RETRIEVAL_QUERY")]
+
+        # Generate embedding with specified dimensionality
+        embeddings = self.model.get_embeddings(
+            inputs,
+            output_dimensionality=self.output_dimensionality
+        )
+
+        # Return the first (and only) embedding vector
+        return embeddings[0].values
 
     def estimate_cost(self, num_chunks: int) -> dict:
         """
