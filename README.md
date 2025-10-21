@@ -47,8 +47,10 @@ uv sync
 # Copy environment template
 cp .env.example .env
 
-# Edit .env with your GCP project ID
-nano .env
+# .env is already configured with:
+# GCP_PROJECT_ID=skai-fastmcp-cloudrun
+# GCP_PROJECT_NUMBER=666924716777
+# GCP_REGION=us-central1
 ```
 
 ### Google Cloud Setup
@@ -58,8 +60,8 @@ nano .env
 gcloud auth login
 gcloud auth application-default login
 
-# Set project
-export GCP_PROJECT_ID="your-project-id"
+# Set project (already configured in .env.example)
+export GCP_PROJECT_ID="skai-fastmcp-cloudrun"
 gcloud config set project $GCP_PROJECT_ID
 
 # Enable required APIs
