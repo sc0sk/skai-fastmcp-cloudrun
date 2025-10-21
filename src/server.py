@@ -74,6 +74,51 @@ async def lifespan(app: FastMCP):
         await _default_vector_store.close()
 
 
+# GitHub username whitelist (only these users can authenticate)
+# Configure via GITHUB_ALLOWED_USERNAMES environment variable (comma-separated)
+ALLOWED_GITHUB_USERNAMES = os.getenv("GITHUB_ALLOWED_USERNAMES", "sc0sk").split(",")
+
+
+# Custom authorization validator for GitHub username whitelist
+async def validate_github_user(request):
+    """
+    Validate that the authenticated GitHub user is in the whitelist.
+
+    Checks the "login" claim from the JWT token (GitHub username).
+    Returns 403 Forbidden if user is not in ALLOWED_GITHUB_USERNAMES.
+    """
+    from starlette.responses import JSONResponse
+
+    # Skip validation if auth is disabled (local dev only)
+    if os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() == "true":
+        return None
+
+    # Get authenticated user info from request state (set by GitHubProvider)
+    user_info = getattr(request.state, "user", None)
+    if not user_info:
+        return JSONResponse(
+            {"error": "Authentication required", "detail": "No user information found"},
+            status_code=401,
+        )
+
+    # Check GitHub username against whitelist
+    github_username = user_info.get("login", "")
+    if github_username not in ALLOWED_GITHUB_USERNAMES:
+        print(f"⚠️  Authorization denied for GitHub user: {github_username}")
+        return JSONResponse(
+            {
+                "error": "Authorization denied",
+                "detail": f"User '{github_username}' is not authorized to access this server",
+                "allowed_users": ALLOWED_GITHUB_USERNAMES,
+            },
+            status_code=403,
+        )
+
+    # User is authorized
+    print(f"✅ Authorization granted for GitHub user: {github_username}")
+    return None
+
+
 # Configure OAuth authentication
 def get_auth_provider():
     """
@@ -116,10 +161,13 @@ def get_auth_provider():
 
     # Create GitHubProvider with configuration
     print(f"✅ GitHub OAuth authentication enabled (base_url: {base_url})")
+    print(f"🔒 Username whitelist: {', '.join(ALLOWED_GITHUB_USERNAMES)}")
     return GitHubProvider(
         client_id=client_id,
         client_secret=client_secret,
         base_url=base_url,
+        # Note: FastMCP GitHubProvider validates tokens automatically
+        # We add username whitelist validation via middleware below
     )
 
 
@@ -336,6 +384,37 @@ async def readiness_check(request):
 # Expose ASGI app for uvicorn (Cloud Run deployment)
 # FastMCP's http_app() method returns the Starlette ASGI application with all custom routes
 app = mcp.http_app()
+
+# Add username whitelist middleware to enforce GitHub username authorization
+# This runs after OAuth authentication but before MCP tool execution
+from starlette.middleware.base import BaseHTTPMiddleware
+
+
+class GitHubWhitelistMiddleware(BaseHTTPMiddleware):
+    """Middleware to enforce GitHub username whitelist for all MCP requests."""
+
+    async def dispatch(self, request, call_next):
+        # Skip whitelist check for health endpoints (they don't need auth)
+        if request.url.path in ["/health", "/ready"]:
+            return await call_next(request)
+
+        # Skip whitelist check if auth is disabled (local dev only)
+        if os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() == "true":
+            return await call_next(request)
+
+        # Validate GitHub user against whitelist
+        validation_response = await validate_github_user(request)
+        if validation_response:
+            return validation_response  # Return 401/403 error response
+
+        # User is authorized, proceed with request
+        return await call_next(request)
+
+
+# Only add whitelist middleware if OAuth is enabled
+if os.getenv("FASTMCP_SERVER_AUTH"):
+    app.add_middleware(GitHubWhitelistMiddleware)
+    print(f"✅ GitHub username whitelist middleware enabled: {', '.join(ALLOWED_GITHUB_USERNAMES)}")
 
 if __name__ == "__main__":
     # Run server with FastMCP CLI
