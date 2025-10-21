@@ -1,11 +1,12 @@
 <!--
 Sync Impact Report:
-Version: 2.4.0 → 2.5.0
-Modified Principles: Added project-specific Speech RAG architecture requirements
-Added Sections: Speech RAG Server architecture (Google Cloud), Vector database standards (Qdrant), Speech processing pipeline, Metadata schema, Hybrid search implementation, Capacity planning, Infrastructure specifications
-Removed Sections: None
-Templates Requiring Updates: ⚠ pending - plan-template.md, spec-template.md, tasks-template.md
-Follow-up TODOs: Create fastmcp.json, design database schemas, implement speech ingestion pipeline, build MCP RAG tools, setup Cloud infrastructure (Redis, Qdrant, PostgreSQL), create deployment scripts
+Version: 2.5.0 → 2.6.0
+Modified Principles: Adopted Google ADK-aligned architecture (LangChain + Vertex AI + Cloud SQL pgvector)
+Added Sections: Google ADK rationale, Vertex AI embeddings (768-dim), LangChain integration patterns, Full text retrieval from PostgreSQL, Dual-table schema (speeches + speech_chunks)
+Removed Sections: Qdrant Cloud architecture, sentence-transformers local embeddings, Direct pgvector integration
+Changed Dependencies: Added LangChain (langchain-google-vertexai, langchain-google-cloud-sql-pg), Added Vertex AI embeddings, Removed sentence-transformers
+Templates Requiring Updates: ⚠ pending - plan-template.md, spec-template.md, tasks-template.md, fastmcp.json
+Follow-up TODOs: Create fastmcp.json with LangChain deps, update database schemas (768-dim vectors), implement speech ingestion with Vertex AI, build MCP RAG tools with full text retrieval, setup Cloud infrastructure (Redis, Cloud SQL pgvector), create deployment scripts
 -->
 
 # skai-fastmcp-cloudrun Constitution
@@ -2180,20 +2181,85 @@ This project implements a **Retrieval-Augmented Generation (RAG) server** for se
 
 ### Architecture Decision (NON-NEGOTIABLE)
 
-The following architecture is the **official standard** for this project:
+**RECOMMENDED ARCHITECTURE: Google ADK-Aligned Stack**
+
+This architecture follows Google's Agent Development Kit (ADK) patterns, which use LangChain for production agent systems.
 
 **Technology Stack**:
 - **Compute**: Google Cloud Run (FastMCP server)
-- **Vector Database**: Qdrant Cloud (managed)
+- **Vector Database**: Cloud SQL PostgreSQL with pgvector extension (v0.8.0)
+- **Embeddings**: Vertex AI textembedding-gecko@003 (768 dimensions)
+- **Framework**: LangChain (Google ADK standard)
 - **Cache**: Cloud Memorystore for Redis
-- **Relational DB**: Cloud SQL for PostgreSQL
 - **Secrets**: Google Secret Manager
 - **CI/CD**: Cloud Build + Artifact Registry
-- **Embeddings**: sentence-transformers/all-MiniLM-L6-v2 (384 dimensions)
 
-**Monthly Cost Target**: $70-80/month (within Google Cloud credits)
+**Monthly Cost**: $100-150/month
+- Cloud SQL PostgreSQL: $60-110 (db-custom-2-7680, 20GB SSD)
+- Cloud Memorystore Redis: $36 (1GB)
+- VPC Connector: $10
+- Vertex AI Embeddings: ~$2/month (query costs only, ~1000 searches/month)
+  - Initial ingestion: ~$1,500 one-time (5,000 speeches × 12k chars/speech)
 
-**Rationale**: Hybrid architecture (Google Cloud + Qdrant) provides optimal cost/performance for metadata-rich speech corpus with HNSW vector search and distributed caching.
+**Performance**:
+- Vector search: 100-200ms p95 (pgvector HNSW)
+- Metadata queries: <20ms (PostgreSQL)
+- Embedding generation: 50-100ms (Vertex AI API)
+- Concurrent users: 10-50 (auto-scaling)
+
+**Why This Architecture (Rationale)**:
+
+1. **Google ADK Alignment** ✅
+   - Google's own Agent Development Kit uses LangChain
+   - Battle-tested in production Google agents
+   - Native integrations: Vertex AI + Cloud SQL
+   - Future-proof: aligns with Google's agent ecosystem
+
+2. **100% Google Cloud** ✅
+   - Single vendor (unified billing, IAM, support)
+   - No external services (Qdrant, OpenAI, etc.)
+   - Enterprise compliance requirements met
+   - Cloud SQL pgvector (managed PostgreSQL extension)
+
+3. **Single Database for Everything** ✅
+   - Vectors (pgvector 768-dim embeddings)
+   - Metadata (speaker, party, chamber, date)
+   - Full text (complete speech transcripts)
+   - ACID transactions across all data
+
+4. **Superior Embeddings** ✅
+   - Vertex AI textembedding-gecko (768 dims) vs sentence-transformers (384 dims)
+   - Higher quality semantic search
+   - Native Google Cloud integration
+   - No container memory overhead (API-based)
+
+5. **LangChain Ecosystem** ✅
+   - `langchain-google-vertexai` (embeddings)
+   - `langchain-google-cloud-sql-pg` (vector store)
+   - Proven RAG patterns and abstractions
+   - Extensive documentation and community
+
+6. **Full Text Retrieval** ✅
+   - PostgreSQL stores complete speech transcripts
+   - Vector search returns chunk text + full speech retrieval
+   - No external lookups required
+   - Single query retrieves vectors + metadata + full text
+
+**Architecture Trade-offs**:
+
+| Factor | This Architecture | Alternative (Qdrant + sentence-transformers) |
+|--------|-------------------|---------------------------------------------|
+| **Google ADK Aligned** | ✅ Yes (LangChain standard) | ❌ No |
+| **Embedding Quality** | 🥇 Vertex AI (768 dims) | Good (384 dims) |
+| **Initial Ingestion Cost** | $1,500 one-time | Free |
+| **Monthly Query Cost** | $2/month | Free |
+| **Vector Search Speed** | 100-200ms | <50ms |
+| **Monthly Infrastructure** | $100-150 | $72 |
+| **100% Google Cloud** | ✅ Yes | ❌ No (Qdrant external) |
+| **Single Database** | ✅ Yes | ❌ No (2 databases) |
+| **Framework** | LangChain | Minimal deps |
+
+**Decision**: Accept higher cost ($1,500 initial + $100/month) for Google ecosystem alignment and superior embeddings
 
 ### Infrastructure Specifications
 
@@ -2202,32 +2268,36 @@ The following architecture is the **official standard** for this project:
 ```yaml
 Configuration:
   CPU: 1 vCPU
-  Memory: 2 GB (for embedding model in-memory)
+  Memory: 512 MB (Vertex AI embeddings via API - no local model)
   Min instances: 0 (scale to zero)
   Max instances: 10
   Concurrency: 80 requests/container
   Timeout: 300s (5 minutes)
   Region: us-central1
-Cost: ~$15-25/month
+Cost: ~$10-15/month
 ```
 
-**Justification**: 2GB memory required to load sentence-transformers model in-memory for fast inference without external API calls.
+**Justification**: Low memory footprint since embeddings generated via Vertex AI API (no in-container model). FastMCP server handles routing and LangChain orchestration only.
 
-#### 2. Qdrant Cloud (Vector Database)
+#### 2. Cloud SQL PostgreSQL with pgvector (Vector Database + Metadata + Full Text)
 
 ```yaml
 Configuration:
-  Tier: Free (1GB) → Paid ($25/month for 5GB)
-  Index: HNSW with quantization
-  Vectors: 1M (free) → 5M (paid)
-  Dimensions: 384 (all-MiniLM-L6-v2)
-  Connection: gRPC over internet (TLS)
-  Metadata filtering: Enabled
-Cost: FREE → $25/month
-Capacity: 50,000 speeches (free) → 250,000 speeches (paid)
+  Instance: db-custom-2-7680 (2 vCPU, 7.5GB RAM)
+  Storage: 20GB SSD
+  Version: PostgreSQL 15
+  Extensions: vector (pgvector 0.8.0)
+  Dimensions: 768 (Vertex AI textembedding-gecko)
+  Index: HNSW (m=16, ef_construction=64)
+  Backups: Automated daily
+  High Availability: No (add in production: +$50/month)
+  Region: us-central1
+  Connection Pooling: Enabled (PgBouncer)
+Cost: ~$60-110/month
+Capacity: 50,000 speeches (~250k chunks after splitting)
 ```
 
-**Justification**: Best-in-class metadata filtering for speeches (speaker, date, topic, event). Free tier sufficient for prototype. HNSW provides <50ms p95 search latency.
+**Justification**: Single database for vectors, metadata, and full speech text. pgvector 0.8.0 provides HNSW indexing for fast vector search. LangChain integration via `langchain-google-cloud-sql-pg`.
 
 #### 3. Cloud Memorystore for Redis
 
@@ -2243,20 +2313,226 @@ Cost: ~$36/month
 
 **Justification**: Required for OAuth token persistence across Cloud Run instances. Provides response caching for frequent queries (TTL-based).
 
-#### 4. Cloud SQL for PostgreSQL
+#### 4. Database Schema (PostgreSQL + pgvector + LangChain)
+```sql
+-- Enable pgvector extension
+CREATE EXTENSION vector;
 
-```yaml
-Configuration:
-  Instance: db-f1-micro (shared CPU, 0.6GB RAM)
-  Storage: 10GB SSD
-  Version: PostgreSQL 15
-  Backups: Automated daily
-  High Availability: No (add in production: +$50/month)
-  Region: us-central1
-Cost: ~$10/month
+-- Speakers reference table
+CREATE TABLE speakers (
+  speaker_id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  party TEXT NOT NULL,
+  chamber TEXT NOT NULL,
+  state TEXT NOT NULL,
+  electorate TEXT
+);
+
+-- Full speeches (complete transcripts)
+CREATE TABLE speeches (
+  speech_id UUID PRIMARY KEY,
+  speaker_id INTEGER REFERENCES speakers(speaker_id),
+  title TEXT NOT NULL,
+  full_text TEXT NOT NULL,  -- ⭐ Complete speech text for retrieval
+  date DATE NOT NULL,
+  hansard_reference TEXT,
+  source_url TEXT,
+  word_count INTEGER,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Speech chunks with vector embeddings (for semantic search)
+CREATE TABLE speech_chunks (
+  chunk_id UUID PRIMARY KEY,
+  speech_id UUID NOT NULL REFERENCES speeches(speech_id) ON DELETE CASCADE,
+  chunk_index INTEGER NOT NULL,
+  chunk_text TEXT NOT NULL,
+  embedding vector(768),  -- ⭐ Vertex AI embeddings (768 dimensions)
+
+  -- Denormalized metadata for fast filtering (no joins during search)
+  speaker TEXT NOT NULL,
+  party TEXT NOT NULL,
+  chamber TEXT NOT NULL,
+  state TEXT NOT NULL,
+  date DATE NOT NULL,
+
+  -- Topic flags (ChromaDB limitation workaround)
+  topic_economy BOOLEAN DEFAULT FALSE,
+  topic_healthcare BOOLEAN DEFAULT FALSE,
+  topic_climate BOOLEAN DEFAULT FALSE,
+  topic_immigration BOOLEAN DEFAULT FALSE,
+  topic_education BOOLEAN DEFAULT FALSE,
+  topic_foreign_policy BOOLEAN DEFAULT FALSE,
+  topic_infrastructure BOOLEAN DEFAULT FALSE,
+
+  hansard_reference TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- HNSW index for fast vector search
+CREATE INDEX ON speech_chunks
+USING hnsw (embedding vector_cosine_ops)
+WITH (m = 16, ef_construction = 64);
+
+-- B-tree indexes for metadata filtering
+CREATE INDEX idx_speech_chunks_speaker ON speech_chunks(speaker);
+CREATE INDEX idx_speech_chunks_party ON speech_chunks(party);
+CREATE INDEX idx_speech_chunks_date ON speech_chunks(date);
+CREATE INDEX idx_speech_chunks_chamber ON speech_chunks(chamber);
 ```
 
-**Justification**: Stores full speech texts (too large for Qdrant payload), relational metadata, speaker/event relationships. Backup vector search via pgvector extension.
+**Performance Tuning**:
+```sql
+-- Increase work memory for better vector index builds
+ALTER DATABASE hansard SET maintenance_work_mem = '2GB';
+
+-- Optimize parallel workers for vector search
+ALTER DATABASE hansard SET max_parallel_workers_per_gather = 4;
+
+-- Enable connection pooling (Cloud SQL built-in PgBouncer)
+```
+
+**Python Integration (LangChain + Vertex AI)**:
+```python
+from fastmcp import FastMCP
+from langchain_google_vertexai import VertexAIEmbeddings
+from langchain_google_cloud_sql_pg import PostgresEngine, PostgresVectorStore
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from pydantic import BaseModel, Field
+from typing import List, Optional
+import os
+
+# Initialize FastMCP server
+mcp = FastMCP("Australian Hansard RAG")
+
+# Initialize Vertex AI embeddings (768 dimensions)
+embeddings = VertexAIEmbeddings(
+    model_name="textembedding-gecko@003",
+    project=os.environ["GCP_PROJECT_ID"]
+)
+
+# Initialize Cloud SQL PostgreSQL engine
+engine = await PostgresEngine.afrom_instance(
+    project_id=os.environ["GCP_PROJECT_ID"],
+    region="us-central1",
+    instance=os.environ["CLOUDSQL_INSTANCE"],
+    database="hansard"
+)
+
+# Initialize vector store with pgvector
+vector_store = await PostgresVectorStore.create(
+    engine=engine,
+    table_name="speech_chunks",
+    embedding_service=embeddings,
+    metadata_columns=[
+        "speaker", "party", "chamber", "state", "date",
+        "topic_economy", "topic_healthcare", "topic_climate",
+        "hansard_reference", "speech_id"
+    ]
+)
+
+# Text splitter for chunking speeches
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=700,
+    chunk_overlap=100,
+    separators=["\n\n", "\n", ". ", " ", ""]
+)
+
+class SpeechSearchResult(BaseModel):
+    """Search result from Australian Hansard."""
+    speech_id: str = Field(description="UUID of the speech")
+    speaker: str = Field(description="MP/Senator name")
+    party: str = Field(description="Political party")
+    chamber: str = Field(description="House of Representatives or Senate")
+    excerpt: str = Field(description="Relevant text excerpt (500 chars)")
+    full_text: str = Field(description="⭐ Complete speech transcript")
+    relevance_score: float = Field(description="Semantic similarity (0-1)")
+    hansard_reference: str = Field(description="Official Hansard reference")
+    date: str = Field(description="Speech date (ISO 8601)")
+
+@mcp.tool
+async def search_speeches(
+    query: str,
+    party: Optional[str] = None,
+    chamber: Optional[str] = None,
+    topic: Optional[str] = None,
+    limit: int = 10,
+    ctx: Context = None
+) -> List[SpeechSearchResult]:
+    """
+    Search Australian Hansard speeches using semantic search + metadata filtering.
+
+    Returns complete speech transcripts along with relevant excerpts.
+    """
+
+    # Build metadata filter
+    filters = {}
+    if party:
+        filters["party"] = party
+    if chamber:
+        filters["chamber"] = chamber
+    if topic and topic.lower() in ["economy", "healthcare", "climate"]:
+        filters[f"topic_{topic.lower()}"] = True
+
+    # Perform hybrid search (vector similarity + metadata filtering)
+    chunk_results = await vector_store.asimilarity_search_with_score(
+        query=query,
+        k=limit,
+        filter=filters if filters else None
+    )
+
+    # Retrieve full speech text for each result
+    results = []
+    for doc, score in chunk_results:
+        speech_id = doc.metadata["speech_id"]
+
+        # Fetch full speech from speeches table
+        full_speech = await engine.execute(
+            "SELECT full_text FROM speeches WHERE speech_id = $1",
+            [speech_id]
+        )
+
+        results.append(SpeechSearchResult(
+            speech_id=speech_id,
+            speaker=doc.metadata["speaker"],
+            party=doc.metadata["party"],
+            chamber=doc.metadata["chamber"],
+            excerpt=doc.page_content[:500],  # Chunk excerpt
+            full_text=full_speech[0]["full_text"],  # ⭐ Complete speech
+            relevance_score=score,
+            hansard_reference=doc.metadata["hansard_reference"],
+            date=doc.metadata["date"]
+        ))
+
+    return results
+
+@mcp.tool
+async def get_speech_full_text(
+    speech_id: str,
+    ctx: Context = None
+) -> str:
+    """
+    Retrieve complete transcript of a speech by ID.
+
+    Use this after search_speeches to get full untruncated text.
+    """
+    result = await engine.execute(
+        "SELECT full_text FROM speeches WHERE speech_id = $1",
+        [speech_id]
+    )
+
+    if not result:
+        raise ValueError(f"Speech {speech_id} not found")
+
+    return result[0]["full_text"]
+```
+
+**Key Features**:
+1. ✅ **LangChain Integration**: Uses `langchain-google-vertexai` + `langchain-google-cloud-sql-pg`
+2. ✅ **Vertex AI Embeddings**: 768-dim textembedding-gecko (superior quality)
+3. ✅ **Full Text Retrieval**: `search_speeches` returns both chunk excerpt AND complete speech
+4. ✅ **Hybrid Search**: Vector similarity + metadata filtering (party, chamber, topics)
+5. ✅ **Google ADK Aligned**: Follows Google's agent development patterns
 
 #### 5. VPC Networking
 
