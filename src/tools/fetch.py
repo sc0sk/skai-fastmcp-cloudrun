@@ -2,11 +2,13 @@
 
 from typing import Dict, Any, Optional
 
+from fastmcp import Context
+
 from src.storage.metadata_store import get_default_metadata_store
 from src.models.speech import SpeechMetadata
 
 
-async def fetch_speech(speech_id: str) -> Dict[str, Any]:
+async def fetch_speech(speech_id: str, ctx: Optional[Context] = None) -> Dict[str, Any]:
     """
     Fetch complete Hansard speech by ID.
 
@@ -26,13 +28,21 @@ async def fetch_speech(speech_id: str) -> Dict[str, Any]:
         >>> speech["full_text"]
         'Mr Speaker, I rise to speak on...'
     """
+    if ctx:
+        await ctx.info(f"Fetching speech {speech_id}")
+
     metadata_store = await get_default_metadata_store()
 
     # Retrieve speech from database
     speech: Optional[SpeechMetadata] = await metadata_store.get_speech(speech_id)
 
     if not speech:
+        if ctx:
+            await ctx.warning(f"Speech not found: {speech_id}")
         raise ValueError(f"Speech not found: {speech_id}")
+
+    if ctx:
+        await ctx.info(f"Retrieved speech: {speech.title} ({speech.word_count} words)")
 
     # Convert to dict for MCP response
     return {

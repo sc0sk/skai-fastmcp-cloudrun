@@ -1,0 +1,161 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OAuth Authorization Callback",
+  "description": "GitHub OAuth callback endpoint handling authorization code exchange",
+  "type": "object",
+  "endpoint": "GET /auth/callback",
+  "request": {
+    "type": "object",
+    "required": ["code", "state"],
+    "properties": {
+      "code": {
+        "type": "string",
+        "description": "Authorization code from GitHub",
+        "minLength": 20,
+        "examples": ["abc123def456ghi789jkl"]
+      },
+      "state": {
+        "type": "string",
+        "description": "CSRF token matching the authorization request",
+        "minLength": 32,
+        "examples": ["a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"]
+      },
+      "error": {
+        "type": "string",
+        "description": "Error code if user denied authorization",
+        "enum": ["access_denied", "server_error"],
+        "examples": ["access_denied"]
+      },
+      "error_description": {
+        "type": "string",
+        "description": "Human-readable error from GitHub",
+        "examples": ["The user denied authorization"]
+      }
+    }
+  },
+  "response": {
+    "success": {
+      "type": "object",
+      "description": "Redirect to client's redirect_uri with access token",
+      "required": ["redirect_to"],
+      "properties": {
+        "redirect_to": {
+          "type": "string",
+          "format": "uri",
+          "description": "Client redirect URI with access token in fragment",
+          "pattern": "^https?://.*#access_token=",
+          "examples": [
+            "http://localhost:8080/callback#access_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...&token_type=Bearer&expires_in=86400"
+          ]
+        },
+        "token_type": {
+          "type": "string",
+          "const": "Bearer",
+          "description": "OAuth token type"
+        },
+        "expires_in": {
+          "type": "integer",
+          "description": "Token lifetime in seconds",
+          "minimum": 1,
+          "examples": [86400]
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "description": "Redirect to client's redirect_uri with error",
+      "required": ["redirect_to"],
+      "properties": {
+        "redirect_to": {
+          "type": "string",
+          "format": "uri",
+          "description": "Client redirect URI with error in fragment",
+          "pattern": "^https?://.*#error=",
+          "examples": [
+            "http://localhost:8080/callback#error=access_denied&error_description=User%20denied%20authorization"
+          ]
+        }
+      }
+    }
+  },
+  "flow": {
+    "description": "OAuth authorization code exchange flow",
+    "steps": [
+      {
+        "step": 1,
+        "action": "Validate state parameter (CSRF protection)",
+        "validation": "state must match pending OAuth transaction"
+      },
+      {
+        "step": 2,
+        "action": "Exchange authorization code for access token",
+        "request": "POST https://github.com/login/oauth/access_token",
+        "parameters": {
+          "client_id": "GitHub OAuth App Client ID",
+          "client_secret": "GitHub OAuth App Client Secret",
+          "code": "Authorization code from request",
+          "redirect_uri": "Client's registered redirect_uri",
+          "code_verifier": "PKCE code verifier (if used)"
+        }
+      },
+      {
+        "step": 3,
+        "action": "Validate GitHub access token",
+        "request": "GET https://api.github.com/user",
+        "headers": {
+          "Authorization": "Bearer {github_access_token}"
+        }
+      },
+      {
+        "step": 4,
+        "action": "Encrypt GitHub token and store in Redis",
+        "storage": "oauth:token:{client_id}"
+      },
+      {
+        "step": 5,
+        "action": "Issue FastMCP JWT token to client",
+        "token": {
+          "algorithm": "HS256",
+          "claims": {
+            "iss": "https://mcp.simonkennedymp.com.au",
+            "sub": "GitHub user ID",
+            "aud": "client_id",
+            "exp": "expires_at (Unix timestamp)",
+            "iat": "issued_at (Unix timestamp)",
+            "login": "GitHub username",
+            "name": "GitHub display name",
+            "email": "GitHub email"
+          }
+        }
+      },
+      {
+        "step": 6,
+        "action": "Redirect to client's redirect_uri with token",
+        "redirect": "http://localhost:8080/callback#access_token={jwt_token}&token_type=Bearer&expires_in=86400"
+      }
+    ]
+  },
+  "examples": [
+    {
+      "description": "Successful authorization",
+      "request": {
+        "code": "abc123def456ghi789jkl",
+        "state": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+      },
+      "response": {
+        "redirect_to": "http://localhost:8080/callback#access_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL21jcC5zaW1vbmtlbm5lZHltcC5jb20uYXUiLCJzdWIiOiIxMjM0NTY3OCIsImF1ZCI6IjU1MGU4NDAwLWUyOWItNDFkNC1hNzE2LTQ0NjY1NTQ0MDAwMCIsImV4cCI6MTcyOTYzNjgwMCwiaWF0IjoxNzI5NTUwNDAwLCJsb2dpbiI6InNrZW5uZWR5IiwibmFtZSI6IlNpbW9uIEtlbm5lZHkiLCJlbWFpbCI6InNpbW9uQGV4YW1wbGUuY29tIn0.signature&token_type=Bearer&expires_in=86400"
+      }
+    },
+    {
+      "description": "User denied authorization",
+      "request": {
+        "error": "access_denied",
+        "error_description": "The user denied authorization",
+        "state": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+      },
+      "response": {
+        "redirect_to": "http://localhost:8080/callback#error=access_denied&error_description=The%20user%20denied%20authorization"
+      }
+    }
+  ]
+}

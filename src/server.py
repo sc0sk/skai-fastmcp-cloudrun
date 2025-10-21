@@ -1,18 +1,28 @@
 """FastMCP server for Australian Hansard RAG system."""
 
-from fastmcp import FastMCP
-from contextlib import asynccontextmanager
-from typing import Dict, Any
-
+import os
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any, Dict
+
+from fastmcp import Context, FastMCP
 
 # Add project root to Python path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.tools.search import search_speeches
 from src.tools.fetch import fetch_speech, get_dataset_stats
+from src.tools.search import search_speeches
+
+# OAuth provider import (conditionally loaded based on configuration)
+try:
+    from fastmcp.server.auth.providers.github import GitHubProvider
+
+    OAUTH_AVAILABLE = True
+except ImportError:
+    OAUTH_AVAILABLE = False
+    print("⚠️  Warning: GitHub OAuth provider not available (fastmcp version too old)")
 
 
 # Lifespan context manager for global resources
@@ -22,11 +32,33 @@ async def lifespan(app: FastMCP):
     Manage global resources (database connections, embedding models).
 
     Note:
-        Connection pools are lazily initialized on first use.
+        Connections are pre-initialized on startup to avoid cold-start delays.
         This context manager ensures proper cleanup on shutdown.
     """
-    # Startup: Resources are lazily initialized
+    # Startup: Pre-initialize resources to avoid cold-start delays
     print("🚀 FastMCP Hansard RAG Server starting...")
+    print("🔄 Warming up database connections and embedding models...")
+
+    from src.storage.metadata_store import get_default_metadata_store
+    from src.storage.vector_store import get_default_vector_store
+
+    # Pre-initialize vector store (triggers DB + embedding model initialization)
+    try:
+        vector_store = await get_default_vector_store()
+        await vector_store._get_vector_store()  # Force initialization
+        print("✅ Vector store initialized")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not initialize vector store: {e}")
+
+    # Pre-initialize metadata store
+    try:
+        metadata_store = await get_default_metadata_store()
+        await metadata_store._get_pool()  # Force connection pool initialization
+        print("✅ Metadata store initialized")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not initialize metadata store: {e}")
+
+    print("✅ Server ready!")
 
     yield
 
@@ -42,17 +74,73 @@ async def lifespan(app: FastMCP):
         await _default_vector_store.close()
 
 
-# Initialize FastMCP server
-mcp = FastMCP("Australian Hansard RAG")
+# Configure OAuth authentication
+def get_auth_provider():
+    """
+    Get authentication provider based on environment configuration.
+
+    Returns:
+        GitHubProvider if OAuth is enabled, None otherwise (local dev bypass)
+    """
+    # Check for development bypass (LOCAL ONLY - DO NOT USE IN PRODUCTION)
+    if os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() == "true":
+        print("⚠️  WARNING: Authentication DISABLED (DANGEROUSLY_OMIT_AUTH=true)")
+        print("   This is ONLY safe for local development. NEVER use in production!")
+        return None
+
+    # Check if OAuth is configured
+    auth_provider = os.getenv("FASTMCP_SERVER_AUTH")
+    if not auth_provider or auth_provider != "fastmcp.server.auth.providers.github.GitHubProvider":
+        print("ℹ️  No authentication configured (FASTMCP_SERVER_AUTH not set)")
+        return None
+
+    # Validate OAuth provider is available
+    if not OAUTH_AVAILABLE:
+        raise RuntimeError(
+            "GitHub OAuth provider not available. "
+            "Upgrade to fastmcp>=2.12.0 with OAuth support."
+        )
+
+    # Get OAuth credentials from environment
+    client_id = os.getenv("FASTMCP_SERVER_AUTH_GITHUB_CLIENT_ID")
+    client_secret = os.getenv("FASTMCP_SERVER_AUTH_GITHUB_CLIENT_SECRET")
+    base_url = os.getenv("FASTMCP_SERVER_AUTH_GITHUB_BASE_URL")
+
+    if not all([client_id, client_secret, base_url]):
+        raise RuntimeError(
+            "GitHub OAuth configuration incomplete. Required environment variables:\n"
+            "  - FASTMCP_SERVER_AUTH_GITHUB_CLIENT_ID\n"
+            "  - FASTMCP_SERVER_AUTH_GITHUB_CLIENT_SECRET\n"
+            "  - FASTMCP_SERVER_AUTH_GITHUB_BASE_URL"
+        )
+
+    # Create GitHubProvider with configuration
+    print(f"✅ GitHub OAuth authentication enabled (base_url: {base_url})")
+    return GitHubProvider(
+        client_id=client_id,
+        client_secret=client_secret,
+        base_url=base_url,
+    )
+
+
+# Initialize FastMCP server with lifespan and optional authentication
+auth_provider = get_auth_provider()
+mcp = FastMCP(
+    "Australian Hansard RAG",
+    lifespan=lifespan,
+    auth=auth_provider,
+)
 
 
 # Tool: Search speeches
 @mcp.tool(
     annotations={
+        "title": "Search Hansard Speeches",
         "readOnlyHint": True,
         "idempotentHint": True,
-        "openWorldHint": True,  # Queries external database
-    }
+        "openWorldHint": True,  # Queries external database (Cloud SQL + Vertex AI)
+    },
+    exclude_args=["ctx"],  # Context is injected, not exposed to clients
 )
 async def search(
     query: str,
@@ -62,6 +150,7 @@ async def search(
     chamber: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    ctx: Context | None = None,
 ) -> Dict[str, Any]:
     """
     Search Australian Hansard speeches using semantic search with metadata filters.
@@ -104,6 +193,7 @@ async def search(
         chamber=chamber,
         date_from=date_from,
         date_to=date_to,
+        ctx=ctx,
     )
 
     return {
@@ -123,12 +213,14 @@ async def search(
 # Tool: Fetch speech
 @mcp.tool(
     annotations={
+        "title": "Fetch Complete Hansard Speech",
         "readOnlyHint": True,
         "idempotentHint": True,
-        "openWorldHint": True,  # Queries external database
-    }
+        "openWorldHint": True,  # Queries external database (Cloud SQL)
+    },
+    exclude_args=["ctx"],  # Context is injected, not exposed to clients
 )
-async def fetch(speech_id: str) -> Dict[str, Any]:
+async def fetch(speech_id: str, ctx: Context | None = None) -> Dict[str, Any]:
     """
     Fetch complete Hansard speech by ID.
 
@@ -155,7 +247,7 @@ async def fetch(speech_id: str) -> Dict[str, Any]:
             ...
         }
     """
-    return await fetch_speech(speech_id)
+    return await fetch_speech(speech_id, ctx=ctx)
 
 
 # Resource: Dataset statistics
@@ -183,7 +275,71 @@ async def dataset_stats() -> str:
     return json.dumps(stats, indent=2)
 
 
+# Health check endpoints for Cloud Run
+@mcp.custom_route("/health", methods=["GET"])
+async def health_check():
+    """Liveness probe for Cloud Run - basic server responsiveness."""
+    from starlette.responses import PlainTextResponse
+
+    return PlainTextResponse("OK")
+
+
+@mcp.custom_route("/ready", methods=["GET"])
+async def readiness_check():
+    """Readiness probe for Cloud Run - verify dependencies are healthy."""
+    import json
+    from datetime import datetime
+
+    from starlette.responses import JSONResponse, PlainTextResponse
+
+    try:
+        # Check database connectivity
+        from src.storage.vector_store import get_default_vector_store
+
+        vector_store = await get_default_vector_store()
+        db_status = "healthy"
+
+        # Check Redis if configured
+        redis_host = os.getenv("REDIS_HOST")
+        if redis_host:
+            import redis.asyncio as aioredis
+
+            redis_client = await aioredis.from_url(
+                f"redis://{redis_host}:{os.getenv('REDIS_PORT', 6379)}",
+                decode_responses=True,
+            )
+            await redis_client.ping()
+            await redis_client.aclose()
+            redis_status = "healthy"
+        else:
+            redis_status = "healthy (in-memory mode)"
+
+        response = {
+            "status": "healthy",
+            "checks": {
+                "database": {"status": db_status},
+                "redis": {"status": redis_status},
+                "embeddings": {"status": "healthy"},
+            },
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+        return JSONResponse(response, status_code=200)
+
+    except Exception as e:
+        error_response = {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+        return JSONResponse(error_response, status_code=503)
+
+
 if __name__ == "__main__":
     # Run server with FastMCP CLI
-    # Usage: fastmcp dev src/server.py
+    # For Cloud Run: PORT environment variable is automatically set by Cloud Run
+    # For local dev: Use DANGEROUSLY_OMIT_AUTH=true to bypass OAuth
+    # Usage:
+    #   Local STDIO: fastmcp dev src/server.py
+    #   Local HTTP: PORT=8080 fastmcp dev src/server.py
+    #   Cloud Run: Automatically uses HTTP with PORT from environment
     mcp.run()

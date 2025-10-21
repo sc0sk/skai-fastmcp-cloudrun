@@ -1,0 +1,118 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OAuth Client Registration",
+  "description": "MCP client dynamic registration endpoint for OAuth Proxy pattern",
+  "type": "object",
+  "endpoint": "POST /register",
+  "request": {
+    "type": "object",
+    "required": ["client_name", "redirect_uris"],
+    "properties": {
+      "client_name": {
+        "type": "string",
+        "description": "Human-readable client name (e.g., 'Claude Desktop')",
+        "minLength": 1,
+        "maxLength": 100,
+        "examples": ["Claude Desktop", "Custom MCP Client"]
+      },
+      "redirect_uris": {
+        "type": "array",
+        "description": "List of allowed OAuth callback URLs",
+        "minItems": 1,
+        "items": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://",
+          "examples": [
+            "http://localhost:8080/callback",
+            "https://app.example.com/oauth/callback"
+          ]
+        }
+      },
+      "logo_uri": {
+        "type": "string",
+        "format": "uri",
+        "description": "Optional URL to client's logo image",
+        "examples": ["https://example.com/logo.png"]
+      },
+      "scopes": {
+        "type": "array",
+        "description": "Requested OAuth scopes",
+        "items": {
+          "type": "string",
+          "enum": ["user", "user:email", "read:user"]
+        },
+        "default": ["user", "user:email"]
+      }
+    }
+  },
+  "response": {
+    "success": {
+      "type": "object",
+      "required": ["client_id", "client_secret", "client_id_issued_at", "authorization_endpoint", "token_endpoint"],
+      "properties": {
+        "client_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique client identifier",
+          "examples": ["550e8400-e29b-41d4-a716-446655440000"]
+        },
+        "client_secret": {
+          "type": "string",
+          "description": "Fixed upstream GitHub OAuth credentials",
+          "examples": ["Ov23liAbcDefGhiJkLmN"]
+        },
+        "client_id_issued_at": {
+          "type": "integer",
+          "description": "Registration timestamp (Unix epoch)",
+          "examples": [1729550400]
+        },
+        "authorization_endpoint": {
+          "type": "string",
+          "format": "uri",
+          "description": "GitHub OAuth authorization URL",
+          "examples": ["https://github.com/login/oauth/authorize"]
+        },
+        "token_endpoint": {
+          "type": "string",
+          "format": "uri",
+          "description": "GitHub OAuth token exchange URL",
+          "examples": ["https://github.com/login/oauth/access_token"]
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["error", "error_description"],
+      "properties": {
+        "error": {
+          "type": "string",
+          "enum": ["invalid_request", "invalid_redirect_uri", "server_error"],
+          "examples": ["invalid_redirect_uri"]
+        },
+        "error_description": {
+          "type": "string",
+          "description": "Human-readable error message",
+          "examples": ["redirect_uris must contain at least one HTTPS URL"]
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "description": "Claude Desktop registration",
+      "request": {
+        "client_name": "Claude Desktop",
+        "redirect_uris": ["http://localhost:8080/callback"],
+        "scopes": ["user", "user:email"]
+      },
+      "response": {
+        "client_id": "550e8400-e29b-41d4-a716-446655440000",
+        "client_secret": "Ov23liAbcDefGhiJkLmN",
+        "client_id_issued_at": 1729550400,
+        "authorization_endpoint": "https://github.com/login/oauth/authorize",
+        "token_endpoint": "https://github.com/login/oauth/access_token"
+      }
+    }
+  ]
+}

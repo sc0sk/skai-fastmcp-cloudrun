@@ -3,6 +3,8 @@
 from typing import List, Optional, Dict, Any
 from datetime import date as date_type
 
+from fastmcp import Context
+
 from src.storage.vector_store import get_default_vector_store
 from src.storage.metadata_store import get_default_metadata_store
 
@@ -15,6 +17,7 @@ async def search_speeches(
     chamber: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    ctx: Optional[Context] = None,
 ) -> List[Dict[str, Any]]:
     """
     Search Hansard speeches using semantic vector search with metadata filters.
@@ -43,6 +46,11 @@ async def search_speeches(
         >>> results[0]["relevance_score"]
         0.87
     """
+    # Log search initiation
+    if ctx:
+        await ctx.info(f"Searching for '{query}' with limit={limit}")
+        await ctx.report_progress(progress=0, total=100)
+
     # Validate limit
     if limit < 1:
         raise ValueError("limit must be at least 1")
@@ -71,13 +79,30 @@ async def search_speeches(
         except ValueError:
             raise ValueError(f"Invalid date_to format: {date_to}. Use YYYY-MM-DD")
 
-    # Perform vector similarity search
+    # Stage 1: Initialize database connection (0-40%)
+    if ctx:
+        await ctx.info("Initializing database connection...")
+        await ctx.report_progress(progress=10, total=100)
+
     vector_store = await get_default_vector_store()
+
+    if ctx:
+        await ctx.report_progress(progress=40, total=100)
+
+    # Stage 2: Initialize embedding model and perform search (40-80%)
+    if ctx:
+        await ctx.info("Generating query embeddings and searching...")
+        await ctx.report_progress(progress=50, total=100)
+
     results = await vector_store.similarity_search(
         query=query,
         k=limit,
         filter=metadata_filter if metadata_filter else None,
     )
+
+    if ctx:
+        await ctx.report_progress(progress=80, total=100)
+        await ctx.info(f"Found {len(results)} matching chunks")
 
     # Enrich with full speech metadata from metadata store
     metadata_store = await get_default_metadata_store()
@@ -89,9 +114,13 @@ async def search_speeches(
         # Get full speech metadata
         speech = await metadata_store.get_speech(speech_id)
 
+        # Convert date to ISO string for JSON serialization
+        date_value = result["metadata"]["date"]
+        date_str = date_value.isoformat() if hasattr(date_value, 'isoformat') else str(date_value)
+
         enriched_results.append({
-            "chunk_id": result["chunk_id"],
-            "speech_id": speech_id,
+            "chunk_id": str(result["chunk_id"]) if result["chunk_id"] else None,
+            "speech_id": str(speech_id),  # Convert UUID to string
             "excerpt": result["chunk_text"][:500],  # Limit excerpt to 500 chars
             "relevance_score": result["score"],
             "chunk_index": result["metadata"]["chunk_index"],
@@ -100,10 +129,15 @@ async def search_speeches(
             "party": result["metadata"]["party"],
             "chamber": result["metadata"]["chamber"],
             "state": result["metadata"].get("state"),
-            "date": result["metadata"]["date"],
+            "date": date_str,  # Convert date to ISO string
             "hansard_reference": result["metadata"]["hansard_reference"],
             "title": speech.title if speech else "Unknown",
             "word_count": speech.word_count if speech else 0,
         })
+
+    # Stage 3: Complete (100%)
+    if ctx:
+        await ctx.report_progress(progress=100, total=100)
+        await ctx.info(f"Search completed: {len(enriched_results)} results")
 
     return enriched_results

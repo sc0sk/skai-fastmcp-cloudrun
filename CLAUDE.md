@@ -11,6 +11,8 @@ Auto-generated from all feature plans. Last updated: 2025-10-21
 - uv (package manager)
 - Python 3.11+ + FastMCP 2.14.0+, LangChain (langchain-google-vertexai, langchain-google-cloud-sql-pg), Vertex AI Embeddings, Pydantic v2 (001-hansard-rag-implementation)
 - Cloud SQL PostgreSQL with pgvector (production), SQLite (local dev for metadata), dual-table schema (speeches + speech_chunks) (001-hansard-rag-implementation)
+- Python 3.11+ (Cloud Run compatibility) + FastMCP 2.14.0+ (OAuth Proxy, GitHubProvider), Docker (multi-stage builds), Redis client (persistent token storage) (002-github-oauth-docker)
+- Redis (production OAuth token storage), Google Secret Manager (JWT signing keys, token encryption keys), Cloud SQL PostgreSQL + pgvector (existing RAG data) (002-github-oauth-docker)
 
 ## Project Structure
 ```
@@ -38,8 +40,11 @@ skai-fastmcp-cloudrun/
 ## Commands
 ```bash
 # Development
-fastmcp dev src/server.py              # Run with MCP Inspector
-fastmcp run src/server.py --transport http  # HTTP mode
+DANGEROUSLY_OMIT_AUTH=true fastmcp dev src/server.py  # Local dev (OAuth bypass)
+PORT=8080 fastmcp dev src/server.py                   # HTTP mode (for testing)
+
+# OAuth secrets generation
+python3 scripts/generate_secrets.py   # Generate JWT_SIGNING_KEY and TOKEN_ENCRYPTION_KEY
 
 # Testing
 pytest tests/ -v --cov=src --cov-report=term-missing
@@ -48,8 +53,14 @@ pytest tests/ -v --cov=src --cov-report=term-missing
 python scripts/init_database.py       # Initialize Cloud SQL schema
 python scripts/ingest_sample.py       # Load sample speeches
 
+# Docker (local development)
+docker build -t hansard-mcp:latest .  # Build Docker image
+docker compose -f deployment/docker-compose.yml up  # Run with Redis
+
 # Deployment
-gcloud run deploy hansard-mcp-server --source=.
+docker build -t gcr.io/PROJECT_ID/hansard-mcp:latest .
+docker push gcr.io/PROJECT_ID/hansard-mcp:latest
+gcloud run deploy hansard-mcp-server --image=gcr.io/PROJECT_ID/hansard-mcp:latest
 ```
 
 ## Code Style
@@ -60,12 +71,18 @@ gcloud run deploy hansard-mcp-server --source=.
 - Constitution compliance: Follow .specify/memory/constitution.md v2.6.0
 
 ## Recent Changes
-- 001-hansard-rag-implementation: Added Python 3.11+ + FastMCP 2.14.0+, LangChain (langchain-google-vertexai, langchain-google-cloud-sql-pg), Vertex AI Embeddings, Pydantic v2
+- 002-github-oauth-docker: Implemented GitHub OAuth authentication and Docker deployment
+  - OAuth Proxy pattern: GitHubProvider with PKCE, JWT signing, token encryption
+  - Multi-stage Docker build: Python 3.13-slim, non-root user (UID 1000), health checks
+  - Health check endpoints: /health (liveness), /ready (readiness with DB/Redis checks)
+  - Development bypass: DANGEROUSLY_OMIT_AUTH=true for local testing
+  - Production token storage: Redis with encrypted GitHub tokens
+  - docker-compose.yml: Local dev environment with Redis service
 - 001-hansard-rag-implementation: Added (Australian Hansard RAG MVP)
   - Google ADK architecture: LangChain + Vertex AI + Cloud SQL pgvector
   - Dual-table schema: speeches (full text) + speech_chunks (768-dim vectors)
   - HNSW indexing (m=24, ef_construction=100)
-  - OAuth deferred to v2 (MVP uses local STDIO)
+  - Context integration: Progress reporting, logging in search/fetch tools
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

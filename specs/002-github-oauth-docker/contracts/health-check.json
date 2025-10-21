@@ -1,0 +1,260 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Health Check Endpoints",
+  "description": "Cloud Run liveness and readiness probe endpoints",
+  "type": "object",
+  "endpoints": [
+    {
+      "path": "/health",
+      "method": "GET",
+      "purpose": "Liveness probe - basic server responsiveness",
+      "request": {
+        "type": "object",
+        "properties": {},
+        "description": "No request body or parameters"
+      },
+      "response": {
+        "success": {
+          "status": 200,
+          "content-type": "text/plain",
+          "body": {
+            "type": "string",
+            "const": "OK",
+            "examples": ["OK"]
+          }
+        },
+        "failure": {
+          "status": 503,
+          "content-type": "text/plain",
+          "body": {
+            "type": "string",
+            "examples": ["Service Unavailable"]
+          }
+        }
+      },
+      "checks": [
+        {
+          "component": "FastMCP server",
+          "check": "Process is running and accepting requests",
+          "timeout": "1s"
+        }
+      ],
+      "probe_config": {
+        "initialDelaySeconds": 10,
+        "periodSeconds": 30,
+        "timeoutSeconds": 5,
+        "successThreshold": 1,
+        "failureThreshold": 3
+      }
+    },
+    {
+      "path": "/ready",
+      "method": "GET",
+      "purpose": "Readiness probe - verify all dependencies are healthy",
+      "request": {
+        "type": "object",
+        "properties": {},
+        "description": "No request body or parameters"
+      },
+      "response": {
+        "success": {
+          "status": 200,
+          "content-type": "application/json",
+          "body": {
+            "type": "object",
+            "required": ["status", "checks"],
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "healthy",
+                "examples": ["healthy"]
+              },
+              "checks": {
+                "type": "object",
+                "required": ["database", "redis", "embeddings"],
+                "properties": {
+                  "database": {
+                    "type": "object",
+                    "required": ["status", "latency_ms"],
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "enum": ["healthy", "degraded", "unhealthy"],
+                        "examples": ["healthy"]
+                      },
+                      "latency_ms": {
+                        "type": "number",
+                        "description": "Database ping latency",
+                        "minimum": 0,
+                        "examples": [12.5]
+                      }
+                    }
+                  },
+                  "redis": {
+                    "type": "object",
+                    "required": ["status", "latency_ms"],
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "enum": ["healthy", "degraded", "unhealthy"],
+                        "examples": ["healthy"]
+                      },
+                      "latency_ms": {
+                        "type": "number",
+                        "description": "Redis ping latency",
+                        "minimum": 0,
+                        "examples": [0.8]
+                      }
+                    }
+                  },
+                  "embeddings": {
+                    "type": "object",
+                    "required": ["status"],
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "enum": ["healthy", "degraded", "unhealthy"],
+                        "examples": ["healthy"]
+                      },
+                      "model": {
+                        "type": "string",
+                        "description": "Vertex AI embedding model name",
+                        "examples": ["text-embedding-005"]
+                      }
+                    }
+                  }
+                }
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Health check timestamp",
+                "examples": ["2025-10-21T22:30:00Z"]
+              }
+            }
+          }
+        },
+        "failure": {
+          "status": 503,
+          "content-type": "application/json",
+          "body": {
+            "type": "object",
+            "required": ["status", "checks", "error"],
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "unhealthy",
+                "examples": ["unhealthy"]
+              },
+              "checks": {
+                "type": "object",
+                "description": "Same structure as success, but at least one component unhealthy"
+              },
+              "error": {
+                "type": "string",
+                "description": "Human-readable error message",
+                "examples": [
+                  "Redis connection timeout",
+                  "Database query failed",
+                  "Vertex AI embeddings unavailable"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "checks": [
+        {
+          "component": "Cloud SQL PostgreSQL",
+          "check": "SELECT 1 query succeeds",
+          "timeout": "5s",
+          "threshold": {
+            "healthy": "<50ms",
+            "degraded": "50-200ms",
+            "unhealthy": ">200ms or timeout"
+          }
+        },
+        {
+          "component": "Redis (Memorystore)",
+          "check": "PING command succeeds",
+          "timeout": "2s",
+          "threshold": {
+            "healthy": "<5ms",
+            "degraded": "5-20ms",
+            "unhealthy": ">20ms or timeout"
+          }
+        },
+        {
+          "component": "Vertex AI Embeddings",
+          "check": "Embedding model initialized",
+          "timeout": "3s",
+          "threshold": {
+            "healthy": "Model loaded",
+            "degraded": "N/A",
+            "unhealthy": "Model not initialized or API error"
+          }
+        }
+      ],
+      "probe_config": {
+        "initialDelaySeconds": 15,
+        "periodSeconds": 10,
+        "timeoutSeconds": 5,
+        "successThreshold": 1,
+        "failureThreshold": 3
+      }
+    }
+  ],
+  "examples": [
+    {
+      "description": "Healthy readiness check",
+      "endpoint": "/ready",
+      "response": {
+        "status": 200,
+        "body": {
+          "status": "healthy",
+          "checks": {
+            "database": {
+              "status": "healthy",
+              "latency_ms": 12.5
+            },
+            "redis": {
+              "status": "healthy",
+              "latency_ms": 0.8
+            },
+            "embeddings": {
+              "status": "healthy",
+              "model": "text-embedding-005"
+            }
+          },
+          "timestamp": "2025-10-21T22:30:00Z"
+        }
+      }
+    },
+    {
+      "description": "Unhealthy readiness check (Redis down)",
+      "endpoint": "/ready",
+      "response": {
+        "status": 503,
+        "body": {
+          "status": "unhealthy",
+          "checks": {
+            "database": {
+              "status": "healthy",
+              "latency_ms": 15.2
+            },
+            "redis": {
+              "status": "unhealthy",
+              "latency_ms": null
+            },
+            "embeddings": {
+              "status": "healthy",
+              "model": "text-embedding-005"
+            }
+          },
+          "error": "Redis connection timeout after 2s",
+          "timestamp": "2025-10-21T22:30:00Z"
+        }
+      }
+    }
+  ]
+}

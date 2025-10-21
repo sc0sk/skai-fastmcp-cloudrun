@@ -25,14 +25,47 @@ Every feature MUST be designed as a discoverable MCP tool with clear metadata. T
 
 ### II. Secure Authentication (NON-NEGOTIABLE)
 
-GitHub OAuth MUST be used for all authentication. Implementation requirements:
-- Use `GitHubProvider` for server authentication
+GitHub OAuth MUST be used for all authentication using FastMCP's **OAuth Proxy pattern** (https://gofastmcp.com/servers/auth/oauth-proxy). Implementation requirements:
+
+**OAuth Proxy Pattern** (REQUIRED):
+- Use `GitHubProvider` which implements the OAuth Proxy pattern internally
+- OAuth Proxy bridges MCP's Dynamic Client Registration (DCR) with GitHub's traditional OAuth
+- Supports client consent screens for security (prevents confused deputy attacks)
+- Handles PKCE (Proof Key for Code Exchange) for both client→proxy and proxy→upstream flows
+- Issues FastMCP JWT tokens to clients while storing encrypted GitHub tokens upstream
 - Browser-based OAuth flow for initial client authentication
-- Automatic token management and caching
-- OAuth Proxy pattern for dynamic client authentication
+- Automatic token management, caching, and refresh
 - User information retrieval from GitHub profile
 
-**Rationale**: GitHub OAuth provides enterprise-grade security with familiar developer experience and automatic token lifecycle management.
+**OAuth Token Storage**: Production deployments MUST use persistent storage for OAuth tokens:
+- **Development**: In-memory storage (default, ephemeral keys, tokens lost on restart)
+- **Production**: Persistent distributed storage (Redis/Firestore) with encryption
+  - `jwt_signing_key`: Cryptographically secure secret for signing MCP client JWT tokens
+  - `token_encryption_key`: Separate cryptographic secret for encrypting GitHub OAuth tokens
+  - `client_storage`: Redis/Firestore for distributed token persistence across restarts
+  - Keys MUST be different secrets (never reuse the same key for signing and encryption)
+  - Keys MUST be stored in Google Secret Manager (never committed to version control)
+  - HTTPS MUST be enforced for all production deployments
+- Without persistent storage, clients must re-authenticate after every server restart
+- Token encryption uses HKDF for key derivation from provided secrets
+
+**Example Production Configuration**:
+```python
+from fastmcp.server.auth.providers.github import GitHubProvider
+from key_value.aio.stores.redis import RedisStore
+import os
+
+auth = GitHubProvider(
+    client_id=os.environ["GITHUB_CLIENT_ID"],
+    client_secret=os.environ["GITHUB_CLIENT_SECRET"],
+    base_url=os.environ["FASTMCP_SERVER_BASE_URL"],
+    jwt_signing_key=os.environ["JWT_SIGNING_KEY"],
+    token_encryption_key=os.environ["TOKEN_ENCRYPTION_KEY"],
+    client_storage=RedisStore(host="redis.example.com", port=6379)
+)
+```
+
+**Rationale**: GitHub OAuth provides enterprise-grade security with familiar developer experience and automatic token lifecycle management. Persistent storage prevents token loss during deployments and enables horizontal scaling.
 
 ### III. Secrets Management (NON-NEGOTIABLE)
 
