@@ -1,6 +1,6 @@
 """Pydantic models for MCP tool results."""
 
-from datetime import date
+from datetime import date as date_type
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
@@ -48,7 +48,7 @@ class SearchResult(BaseModel):
     speaker: str = Field(..., description="Speaker name")
     party: str = Field(..., description="Political party")
     chamber: str = Field(..., description="Chamber")
-    date: date = Field(..., description="Speech date")
+    date: date_type = Field(..., description="Speech date")
     title: str = Field(..., description="Speech title")
     hansard_reference: str = Field(..., description="Official Hansard citation")
     topic_tags: List[str] = Field(default_factory=list, description="Topic tags")

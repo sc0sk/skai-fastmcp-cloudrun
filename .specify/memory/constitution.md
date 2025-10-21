@@ -127,7 +127,41 @@ Servers MUST support standard MCP JSON configuration format for multi-client com
 
 **Rationale**: Standard MCP JSON format enables server distribution across ecosystem; absolute paths ensure reliability; uv provides fast, reproducible dependency management.
 
-### XI. Tool Implementation Standards (NON-NEGOTIABLE)
+### XI. Separation of Ingestion and Query Operations (NON-NEGOTIABLE)
+
+MCP servers MUST separate data ingestion (write operations) from query operations (read operations):
+
+**MCP Server Tools** (Read-Only):
+- Search and retrieval operations
+- Resource browsing and access
+- Statistical queries and analytics
+- Tools SHOULD use `readOnlyHint: true` annotation
+
+**CLI Scripts** (Write Operations):
+- Data ingestion and import
+- Database migrations and schema updates
+- Bulk updates and deletions
+- Administrative operations
+
+**Rationale**:
+- **Security**: MCP servers should not expose file system write access to clients
+- **Safety**: Ingestion is typically one-time/periodic admin operation, not runtime query
+- **Separation of Concerns**: Query operations are user-facing; ingestion is admin-facing
+- **Deployment**: Production MCP servers can run with read-only database credentials
+- **Auditability**: CLI scripts provide clear audit trail for data modifications
+
+**Implementation Pattern**:
+```
+scripts/
+  ingest_data.py          # CLI script for admin operations
+src/
+  server.py               # MCP server with read-only tools
+  tools/
+    search.py             # Query operations only
+    ingest.py             # Shared logic (used by CLI, not exposed as MCP tool)
+```
+
+### XII. Tool Implementation Standards (NON-NEGOTIABLE)
 
 All tools MUST implement comprehensive standards following FastMCP best practices:
 

@@ -1,11 +1,11 @@
 """Pydantic models for Australian Hansard speeches."""
 
 import hashlib
-from datetime import date
+from datetime import date as date_type
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, computed_field, field_validator
+from pydantic import BaseModel, Field, computed_field, field_validator, ConfigDict
 
 
 class SpeechMetadata(BaseModel):
@@ -27,10 +27,10 @@ class SpeechMetadata(BaseModel):
     electorate: Optional[str] = Field(
         None, max_length=100, description="Electorate (House members only)"
     )
-    state: str = Field(..., description="Australian state/territory")
+    state: Optional[str] = Field(None, description="Australian state/territory")
 
     # Parliamentary context
-    date: date = Field(..., description="Speech date (ISO 8601)")
+    date: date_type = Field(..., description="Speech date (ISO 8601)")
     hansard_reference: str = Field(
         ..., min_length=1, max_length=500, description="Official Hansard citation"
     )
@@ -64,8 +64,10 @@ class SpeechMetadata(BaseModel):
 
     @field_validator("state")
     @classmethod
-    def validate_state(cls, v: str) -> str:
+    def validate_state(cls, v: Optional[str]) -> Optional[str]:
         """Validate state is valid Australian state/territory."""
+        if v is None:
+            return v
         valid_states = {"NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT"}
         if v not in valid_states:
             raise ValueError(f"state must be one of: {valid_states}")
@@ -148,7 +150,7 @@ class SpeechChunkMetadata(BaseModel):
     speaker: str = Field(..., description="Speaker name")
     party: str = Field(..., description="Political party")
     chamber: str = Field(..., description="Chamber")
-    date: date = Field(..., description="Speech date")
+    date: date_type = Field(..., description="Speech date")
     topic_tags: List[str] = Field(default_factory=list, description="Topic tags")
 
     # Additional metadata
