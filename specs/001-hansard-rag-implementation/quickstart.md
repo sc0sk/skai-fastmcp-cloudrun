@@ -20,7 +20,7 @@
 ### 1. Clone Repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/sc0sk/skai-fastmcp-cloudrun.git
 cd skai-fastmcp-cloudrun
 git checkout 001-hansard-rag-implementation
 ```
@@ -462,8 +462,62 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 ---
 
+## CI/CD & GitHub Setup
+
+### Configure GitHub Secrets
+
+For CI/CD deployment to Cloud Run, configure GitHub secrets following the template:
+
+**See**: [.github/secrets-template.md](/.github/secrets-template.md)
+
+**Required Secrets**:
+- `GCP_PROJECT_ID` - Your Google Cloud Project ID
+- `GCP_SERVICE_ACCOUNT_KEY` - Service account JSON key (base64-encoded)
+- `GCP_REGION` - Deployment region (e.g., `us-central1`)
+- `CLOUDSQL_INSTANCE` - Cloud SQL instance name (e.g., `hansard-db`)
+
+**Quick Setup**:
+```bash
+# Set project ID
+gh secret set GCP_PROJECT_ID --body "your-project-id"
+
+# Create service account and set key
+# (See .github/secrets-template.md for full instructions)
+
+# Set region and instance
+gh secret set GCP_REGION --body "us-central1"
+gh secret set CLOUDSQL_INSTANCE --body "hansard-db"
+
+# Verify
+gh secret list
+```
+
+### Deploy to Cloud Run
+
+**Automatic Deployment** (via GitHub Actions):
+- Push to `main` branch triggers deployment
+- Workflow: `.github/workflows/deploy.yml` (to be created in Phase 6)
+
+**Manual Deployment**:
+```bash
+# Build container
+gcloud builds submit --tag gcr.io/$GCP_PROJECT_ID/hansard-mcp-server
+
+# Deploy to Cloud Run
+gcloud run deploy hansard-mcp-server \
+    --image gcr.io/$GCP_PROJECT_ID/hansard-mcp-server \
+    --region us-central1 \
+    --platform managed \
+    --allow-unauthenticated \
+    --set-env-vars GCP_PROJECT_ID=$GCP_PROJECT_ID \
+    --add-cloudsql-instances $INSTANCE_CONNECTION_NAME
+```
+
+---
+
 ## Resources
 
+- **Repository**: https://github.com/sc0sk/skai-fastmcp-cloudrun
 - **FastMCP Docs**: https://github.com/jlowin/fastmcp
 - **LangChain Google**: https://python.langchain.com/docs/integrations/providers/google
 - **Vertex AI Embeddings**: https://cloud.google.com/vertex-ai/docs/generative-ai/embeddings

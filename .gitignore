@@ -1,0 +1,80 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Local development data
+data/speeches.db
+data/*.db
+data/*.sqlite
+*.db
+*.sqlite
+
+# Cloud credentials (NEVER commit these)
+*-key.json
+gcp-key.json
+credentials.json
+service-account*.json
+
+# MCP Inspector
+.mcp/
+
+# Logs
+*.log
+logs/
+
+# Cloud Run
+.gcloudignore
+
+# FastMCP
+fastmcp.lock
+
+# Temporary files
+tmp/
+temp/
+*.tmp
