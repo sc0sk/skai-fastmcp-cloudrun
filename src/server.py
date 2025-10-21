@@ -131,7 +131,6 @@ mcp = FastMCP(
     auth=auth_provider,
 )
 
-
 # Tool: Search speeches
 @mcp.tool(
     annotations={
@@ -277,7 +276,7 @@ async def dataset_stats() -> str:
 
 # Health check endpoints for Cloud Run
 @mcp.custom_route("/health", methods=["GET"])
-async def health_check():
+async def health_check(request):
     """Liveness probe for Cloud Run - basic server responsiveness."""
     from starlette.responses import PlainTextResponse
 
@@ -285,7 +284,7 @@ async def health_check():
 
 
 @mcp.custom_route("/ready", methods=["GET"])
-async def readiness_check():
+async def readiness_check(request):
     """Readiness probe for Cloud Run - verify dependencies are healthy."""
     import json
     from datetime import datetime
@@ -333,6 +332,10 @@ async def readiness_check():
         }
         return JSONResponse(error_response, status_code=503)
 
+
+# Expose ASGI app for uvicorn (Cloud Run deployment)
+# FastMCP's http_app() method returns the Starlette ASGI application with all custom routes
+app = mcp.http_app()
 
 if __name__ == "__main__":
     # Run server with FastMCP CLI

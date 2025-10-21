@@ -15,7 +15,7 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app
 
 # Copy dependency files (leverage layer caching)
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 
 # Install dependencies separately (better caching)
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -58,6 +58,6 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health').read()"
 
-# Start FastMCP server
-# Note: FastMCP will automatically use HTTP transport when PORT env var is set
-CMD ["python", "-m", "src.server"]
+# Start FastMCP server in HTTP mode for Cloud Run
+# Use the ASGI app exposed in server.py
+CMD ["sh", "-c", "uvicorn src.server:app --host 0.0.0.0 --port ${PORT:-8080} --app-dir /app"]
