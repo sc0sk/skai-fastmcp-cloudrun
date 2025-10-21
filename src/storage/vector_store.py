@@ -1,11 +1,15 @@
 """PostgreSQL vector store using LangChain PostgresVectorStore with pgvector."""
 
-from langchain_google_cloud_sql_pg import PostgresVectorStore
+from langchain_google_cloud_sql_pg import PostgresVectorStore, PostgresEngine
 from langchain_google_vertexai import VertexAIEmbeddings
 from typing import List, Optional, Dict, Any
 import os
 import asyncio
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 
 class VectorStoreService:
@@ -18,6 +22,7 @@ class VectorStoreService:
         instance: str = None,
         database: str = None,
         user: str = None,
+        password: str = None,
         embedding_service: Any = None,
         table_name: str = "speech_chunks",
     ):
@@ -30,17 +35,20 @@ class VectorStoreService:
             instance: Cloud SQL instance name (defaults to CLOUDSQL_INSTANCE env var)
             database: Database name (defaults to CLOUDSQL_DATABASE env var)
             user: Database user (defaults to CLOUDSQL_USER env var)
+            password: Database password (defaults to DATABASE_PASSWORD env var, None for IAM)
             embedding_service: VertexAIEmbeddings instance (auto-created if None)
             table_name: Vector table name (default: speech_chunks)
 
         Note:
-            Uses Cloud SQL Python Connector for automatic IAM authentication
+            Uses Cloud SQL Python Connector. Provide both user and password for basic auth,
+            or neither for IAM authentication.
         """
         self.project_id = project_id or os.getenv("GCP_PROJECT_ID")
         self.region = region or os.getenv("GCP_REGION", "us-central1")
         self.instance = instance or os.getenv("CLOUDSQL_INSTANCE")
         self.database = database or os.getenv("CLOUDSQL_DATABASE", "hansard")
         self.user = user or os.getenv("CLOUDSQL_USER", "postgres")
+        self.password = password or os.getenv("DATABASE_PASSWORD")
         self.table_name = table_name
 
         # Create embedding service if not provided
@@ -51,7 +59,11 @@ class VectorStoreService:
                 location=os.getenv("VERTEX_AI_LOCATION", "us-central1"),
             )
         else:
-            self.embeddings = embedding_service
+            # If provided a custom EmbeddingService, extract the VertexAIEmbeddings instance
+            if hasattr(embedding_service, 'embeddings'):
+                self.embeddings = embedding_service.embeddings
+            else:
+                self.embeddings = embedding_service
 
         # Store for lazy initialization
         self._vector_store: Optional[PostgresVectorStore] = None
@@ -67,21 +79,26 @@ class VectorStoreService:
             Creates table with HNSW index if not exists
         """
         if self._vector_store is None:
-            # Initialize async connection to Cloud SQL
-            self._vector_store = await PostgresVectorStore.create(
+            # Create PostgresEngine for Cloud SQL connection
+            engine = await PostgresEngine.afrom_instance(
                 project_id=self.project_id,
                 region=self.region,
                 instance=self.instance,
                 database=self.database,
                 user=self.user,
+                password=self.password,
+            )
+
+            # Initialize PostgresVectorStore with engine and custom column mappings
+            self._vector_store = await PostgresVectorStore.create(
+                engine=engine,
                 table_name=self.table_name,
                 embedding_service=self.embeddings,
-                # HNSW index parameters from data-model.md
-                index_type="hnsw",
-                index_params={
-                    "m": 24,  # Max connections per layer
-                    "ef_construction": 100,  # Build-time search depth
-                },
+                # Map our schema to LangChain's expected columns
+                id_column="chunk_id",
+                content_column="chunk_text",
+                embedding_column="embedding",
+                metadata_columns=["speech_id", "chunk_index", "speaker", "party", "chamber", "state", "date", "hansard_reference"],
             )
 
         return self._vector_store

@@ -3,10 +3,16 @@
 from typing import List, Optional, Dict, Any
 from datetime import date, datetime
 import os
+import asyncio
 import asyncpg
 from contextlib import asynccontextmanager
+from google.cloud.sql.connector import Connector
+from dotenv import load_dotenv
 
 from src.models.speech import SpeechMetadata
+
+# Load environment variables
+load_dotenv()
 
 
 class MetadataStore:
@@ -44,34 +50,49 @@ class MetadataStore:
 
         # Connection pool (lazy init)
         self._pool: Optional[asyncpg.Pool] = None
+        self._connector: Optional[Connector] = None
+
+    async def _get_connection(self) -> asyncpg.Connection:
+        """
+        Get database connection using Cloud SQL Python Connector.
+
+        Returns:
+            asyncpg connection
+
+        Note:
+            Uses Cloud SQL Python Connector for local dev and production.
+            Supports IAM authentication when password is None.
+        """
+        # Initialize Cloud SQL Python Connector if needed
+        if self._connector is None:
+            loop = asyncio.get_running_loop()
+            self._connector = Connector(loop=loop)
+
+        # Determine auth method (IAM if no password)
+        use_iam_auth = self.password is None
+
+        # Create connection
+        conn = await self._connector.connect_async(
+            f"{self.project_id}:{self.region}:{self.instance}",
+            "asyncpg",
+            user=self.user,
+            db=self.database,
+            enable_iam_auth=use_iam_auth,
+            password=self.password if not use_iam_auth else None,
+        )
+
+        return conn
 
     async def _get_pool(self) -> asyncpg.Pool:
         """
         Get or create connection pool.
 
-        Returns:
-            asyncpg connection pool
-
-        Note:
-            Uses Cloud SQL Proxy connection string format:
-            /cloudsql/PROJECT:REGION:INSTANCE/.s.PGSQL.5432
+        Note: Currently using single connections via Cloud SQL Connector.
+        TODO: Implement proper connection pooling with Cloud SQL Connector.
         """
-        if self._pool is None:
-            # Cloud SQL Unix socket connection
-            connection_string = (
-                f"/cloudsql/{self.project_id}:{self.region}:{self.instance}"
-            )
-
-            self._pool = await asyncpg.create_pool(
-                host=connection_string,
-                database=self.database,
-                user=self.user,
-                password=self.password,
-                min_size=2,
-                max_size=10,
-            )
-
-        return self._pool
+        # For now, we'll use _get_connection() in methods instead of pooling
+        # This is simpler and works with Cloud SQL Connector
+        raise NotImplementedError("Use _get_connection() instead")
 
     async def add_speech(self, speech: SpeechMetadata) -> str:
         """
@@ -101,10 +122,10 @@ class MetadataStore:
             ... )
             >>> speech_id = await store.add_speech(speech)
         """
-        pool = await self._get_pool()
+        conn = await self._get_connection()
 
-        # Check for duplicate via content_hash
-        async with pool.acquire() as conn:
+        try:
+            # Check for duplicate via content_hash
             existing = await conn.fetchval(
                 "SELECT speech_id FROM speeches WHERE content_hash = $1",
                 speech.content_hash,
@@ -139,7 +160,9 @@ class MetadataStore:
                 speech.topic_tags or [],
             )
 
-        return str(speech_id)
+            return str(speech_id)
+        finally:
+            await conn.close()
 
     async def get_speech(self, speech_id: str) -> Optional[SpeechMetadata]:
         """
@@ -157,9 +180,9 @@ class MetadataStore:
             >>> speech.speaker
             'Simon Kennedy'
         """
-        pool = await self._get_pool()
+        conn = await self._get_connection()
 
-        async with pool.acquire() as conn:
+        try:
             row = await conn.fetchrow(
                 "SELECT * FROM speeches WHERE speech_id = $1",
                 speech_id,
@@ -181,6 +204,8 @@ class MetadataStore:
                 hansard_reference=row["hansard_reference"],
                 topic_tags=row["topic_tags"],
             )
+        finally:
+            await conn.close()
 
     async def search_speeches(
         self,
@@ -213,7 +238,7 @@ class MetadataStore:
             ...     date_from=date(2024, 1, 1)
             ... )
         """
-        pool = await self._get_pool()
+        conn = await self._get_connection()
 
         # Build dynamic query
         conditions = []
@@ -256,11 +281,13 @@ class MetadataStore:
         """
         params.append(limit)
 
-        async with pool.acquire() as conn:
+        try:
             rows = await conn.fetch(query, *params)
 
-        # Convert to dicts
-        return [dict(row) for row in rows]
+            # Convert to dicts
+            return [dict(row) for row in rows]
+        finally:
+            await conn.close()
 
     async def delete_speech(self, speech_id: str) -> bool:
         """
@@ -275,9 +302,9 @@ class MetadataStore:
         Note:
             Should also delete associated chunks from speech_chunks table
         """
-        pool = await self._get_pool()
+        conn = await self._get_connection()
 
-        async with pool.acquire() as conn:
+        try:
             result = await conn.execute(
                 "DELETE FROM speeches WHERE speech_id = $1",
                 speech_id,
@@ -286,6 +313,8 @@ class MetadataStore:
             # Result format: "DELETE N" where N is row count
             deleted_count = int(result.split()[-1])
             return deleted_count > 0
+        finally:
+            await conn.close()
 
     async def get_stats(self) -> Dict[str, Any]:
         """
@@ -300,9 +329,9 @@ class MetadataStore:
             >>> stats["speech_count"]
             65
         """
-        pool = await self._get_pool()
+        conn = await self._get_connection()
 
-        async with pool.acquire() as conn:
+        try:
             # Speech count
             speech_count = await conn.fetchval("SELECT COUNT(*) FROM speeches")
 
@@ -326,19 +355,21 @@ class MetadataStore:
                 """
             )
 
-        return {
-            "speech_count": speech_count,
-            "unique_speakers": unique_speakers,
-            "earliest_date": date_range["earliest"].isoformat() if date_range["earliest"] else None,
-            "latest_date": date_range["latest"].isoformat() if date_range["latest"] else None,
-            "party_breakdown": {row["party"]: row["count"] for row in party_breakdown},
-        }
+            return {
+                "speech_count": speech_count,
+                "unique_speakers": unique_speakers,
+                "earliest_date": date_range["earliest"].isoformat() if date_range["earliest"] else None,
+                "latest_date": date_range["latest"].isoformat() if date_range["latest"] else None,
+                "party_breakdown": {row["party"]: row["count"] for row in party_breakdown},
+            }
+        finally:
+            await conn.close()
 
     async def close(self):
-        """Close connection pool."""
-        if self._pool:
-            await self._pool.close()
-            self._pool = None
+        """Close Cloud SQL connector."""
+        if self._connector:
+            await self._connector.close_async()
+            self._connector = None
 
 
 # Singleton instance with default configuration
