@@ -1,0 +1,83 @@
+# Cloud Monitoring Uptime Check Configuration
+# Create this via Google Cloud Console: Monitoring > Uptime Checks
+
+displayName: "Hansard MCP Health Check"
+monitoredResource:
+  type: "uptime_url"
+  labels:
+    host: "mcp.simonkennedymp.com.au"
+httpCheck:
+  path: "/health"
+  port: 443
+  useSsl: true
+  validateSsl: true
+  requestMethod: GET
+  acceptedResponseStatusCodes:
+    - statusClass: STATUS_CLASS_2XX
+period: 300s  # Check every 5 minutes
+timeout: 10s
+selectedRegions:
+  - USA
+  - EUROPE
+  - ASIA_PACIFIC
+
+# Alert Policy Configuration
+# Create notification channel first, then alert policy
+
+---
+# Notification Channel (Email)
+displayName: "Hansard MCP Alerts"
+type: "email"
+labels:
+  email_address: "scott.coleman@aph.gov.au"
+
+---
+# Alert Policy - Health Check Failures
+displayName: "Hansard MCP Service Down"
+conditions:
+  - displayName: "Health check failing"
+    conditionThreshold:
+      filter: 'metric.type="monitoring.googleapis.com/uptime_check/check_passed" resource.type="uptime_url" metric.label.check_id="hansard-mcp-health"'
+      aggregations:
+        - alignmentPeriod: "300s"
+          perSeriesAligner: "ALIGN_FRACTION_TRUE"
+      comparison: "COMPARISON_LT"
+      thresholdValue: 0.8  # Alert if less than 80% of checks pass
+      duration: "300s"  # For 5 minutes
+combiner: "OR"
+notificationChannels:
+  - "projects/skai-fastmcp-cloudrun/notificationChannels/[CHANNEL_ID]"
+alertStrategy:
+  autoClose: "1800s"  # Auto-close after 30 minutes if recovered
+
+---
+# Alert Policy - High Error Rate
+displayName: "Hansard MCP High Error Rate"
+conditions:
+  - displayName: "Cloud Run error rate > 5%"
+    conditionThreshold:
+      filter: 'resource.type="cloud_run_revision" resource.labels.service_name="hansard-mcp-server" metric.type="run.googleapis.com/request_count" metric.labels.response_code_class="5xx"'
+      aggregations:
+        - alignmentPeriod: "60s"
+          perSeriesAligner: "ALIGN_RATE"
+          crossSeriesReducer: "REDUCE_SUM"
+      comparison: "COMPARISON_GT"
+      thresholdValue: 5.0  # More than 5 errors per minute
+      duration: "300s"
+combiner: "OR"
+
+---
+# Alert Policy - High Latency
+displayName: "Hansard MCP High Latency"
+conditions:
+  - displayName: "95th percentile latency > 2 seconds"
+    conditionThreshold:
+      filter: 'resource.type="cloud_run_revision" resource.labels.service_name="hansard-mcp-server" metric.type="run.googleapis.com/request_latencies"'
+      aggregations:
+        - alignmentPeriod: "60s"
+          perSeriesAligner: "ALIGN_DELTA"
+          crossSeriesReducer: "REDUCE_PERCENTILE_95"
+      comparison: "COMPARISON_GT"
+      thresholdValue: 2000  # 2000ms = 2 seconds
+      duration: "300s"
+combiner: "OR"

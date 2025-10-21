@@ -182,13 +182,92 @@ gcloud run services describe hansard-mcp-server --region=us-central1 --format="g
   gcloud run services update hansard-mcp-server --region=us-central1 --update-secrets="GITHUB_ALLOWED_USERNAMES=github-allowed-usernames:latest"
   ```
 
+## Redis Setup (Production OAuth Token Storage)
+
+Create Cloud Memorystore Redis instance for persistent OAuth token storage:
+
+```bash
+# Enable Redis API
+gcloud services enable redis.googleapis.com
+
+# Create Redis instance (basic tier, 1GB)
+gcloud redis instances create hansard-mcp-redis \
+  --size=1 \
+  --region=us-central1 \
+  --redis-version=redis_7_0 \
+  --tier=basic \
+  --network=default
+
+# Get Redis connection details
+REDIS_HOST=$(gcloud redis instances describe hansard-mcp-redis \
+  --region=us-central1 --format="value(host)")
+echo "Redis Host: $REDIS_HOST"
+
+# Create VPC connector for Cloud Run to access Redis
+gcloud services enable vpcaccess.googleapis.com
+gcloud compute networks vpc-access connectors create hansard-vpc-connector \
+  --region=us-central1 \
+  --network=default \
+  --range=10.8.0.0/28 \
+  --min-instances=2 \
+  --max-instances=3 \
+  --machine-type=e2-micro
+
+# Update Cloud Run to use VPC connector and Redis
+gcloud run services update hansard-mcp-server \
+  --region=us-central1 \
+  --vpc-connector=hansard-vpc-connector \
+  --vpc-egress=private-ranges-only \
+  --update-env-vars="REDIS_HOST=$REDIS_HOST,REDIS_PORT=6379,REDIS_DB=0"
+```
+
+**Redis Configuration:**
+- **Instance**: hansard-mcp-redis
+- **Version**: Redis 7.0
+- **Tier**: Basic (non-replicated, suitable for development/testing)
+- **Size**: 1GB
+- **Network**: default VPC
+- **Access**: Via VPC connector from Cloud Run
+
+## Monitoring and Alerts
+
+Cloud Monitoring configuration is available in `monitoring/uptime-check.yaml`.
+
+**To set up monitoring:**
+1. Go to Cloud Console > Monitoring > Uptime Checks
+2. Create uptime check for `https://mcp.simonkennedymp.com.au/health`
+3. Configure alert policies as documented in `monitoring/uptime-check.yaml`
+
+**Recommended Alert Policies:**
+- **Service Down**: Health check failures (< 80% success rate for 5 minutes)
+- **High Error Rate**: 5xx errors > 5/minute
+- **High Latency**: 95th percentile > 2 seconds
+
+**View Logs:**
+```bash
+# Real-time logs
+gcloud run logs tail hansard-mcp-server --region=us-central1
+
+# Recent logs
+gcloud run logs read hansard-mcp-server --region=us-central1 --limit=100
+
+# Filter for errors
+gcloud run logs read hansard-mcp-server --region=us-central1 \
+  | grep -i error
+
+# Filter for OAuth events
+gcloud run logs read hansard-mcp-server --region=us-central1 \
+  | grep -i "authorization"
+```
+
 ## Production URLs
 
+- **Custom Domain**: https://mcp.simonkennedymp.com.au
 - **Service URL**: https://hansard-mcp-server-666924716777.us-central1.run.app
-- **Health Check**: https://hansard-mcp-server-666924716777.us-central1.run.app/health
-- **Readiness Check**: https://hansard-mcp-server-666924716777.us-central1.run.app/ready
-- **OAuth Callback**: https://hansard-mcp-server-666924716777.us-central1.run.app/auth/callback
-- **MCP SSE Endpoint**: https://hansard-mcp-server-666924716777.us-central1.run.app/mcp/v1/
+- **Health Check**: https://mcp.simonkennedymp.com.au/health
+- **Readiness Check**: https://mcp.simonkennedymp.com.au/ready
+- **OAuth Callback**: https://mcp.simonkennedymp.com.au/auth/callback
+- **MCP SSE Endpoint**: https://mcp.simonkennedymp.com.au/mcp/v1/
 
 ## Cost Optimization
 
@@ -202,14 +281,40 @@ Current configuration:
 Estimated monthly cost (assuming light usage):
 - Cloud Run: ~$5-10/month (mostly cold starts + minimal active time)
 - Cloud SQL: ~$25/month (db-f1-micro)
+- Redis (Memorystore Basic 1GB): ~$36/month
+- VPC Connector: ~$10/month (2-3 instances of e2-micro)
 - Vertex AI Embeddings: Pay-per-use (~$0.00002/1000 chars)
-- Secret Manager: $0.06/secret/month (~$0.36/month for 6 secrets)
-- **Total**: ~$30-40/month
+- Secret Manager: $0.06/secret/month (~$0.42/month for 7 secrets)
+- **Total**: ~$76-82/month
 
-## Next Steps
+## Completed Infrastructure
 
-1. **Custom Domain** (optional): Map `mcp.simonkennedymp.com.au` to Cloud Run service
-2. **Redis** (recommended for production): Add Cloud Memorystore for persistent OAuth token storage
-3. **Monitoring**: Set up Cloud Monitoring alerts for health check failures
-4. **Backup**: Schedule Cloud SQL backups
-5. **CI/CD**: Automate deployments via GitHub Actions
+✅ **Custom Domain**: `mcp.simonkennedymp.com.au` mapped to Cloud Run
+✅ **Redis**: Cloud Memorystore for persistent OAuth tokens
+✅ **VPC Connector**: Private network access to Redis
+✅ **Monitoring Configuration**: Alert policies defined in `monitoring/`
+✅ **CI/CD**: GitHub Actions workflows in `.github/workflows/`
+
+## Optional Enhancements
+
+1. **Cloud SQL Backups**: Schedule automated backups
+   ```bash
+   gcloud sql instances patch hansard-db \
+     --backup-start-time=02:00 \
+     --retained-backups-count=7
+   ```
+
+2. **Redis Replica** (for high availability): Upgrade to Standard tier
+   ```bash
+   # Note: Requires instance recreation (cannot upgrade tier in-place)
+   gcloud redis instances create hansard-mcp-redis-ha \
+     --tier=standard \
+     --size=1 \
+     --region=us-central1 \
+     --redis-version=redis_7_0 \
+     --replica-count=1
+   ```
+
+3. **Cloud Armor** (DDoS protection): Add security policies
+4. **Cloud CDN**: Cache static assets
+5. **Multi-region**: Deploy to multiple regions for lower latency
