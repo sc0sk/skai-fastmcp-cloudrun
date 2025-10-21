@@ -1264,6 +1264,7 @@ Enable these APIs before deployment:
 - **Health Check**: Optional `/health` endpoint (Cloud Run handles this)
 - **User**: Run as non-root user for security
 - **Layer Optimization**: Multi-stage builds to minimize image size
+- **WSL2 Compatibility**: Use `docker.exe` command (not `docker`) when running Docker commands in WSL2 environments
 
 **Example Dockerfile Structure**:
 ```dockerfile
