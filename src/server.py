@@ -394,8 +394,19 @@ class GitHubWhitelistMiddleware(BaseHTTPMiddleware):
     """Middleware to enforce GitHub username whitelist for all MCP requests."""
 
     async def dispatch(self, request, call_next):
-        # Skip whitelist check for health endpoints (they don't need auth)
-        if request.url.path in ["/health", "/ready"]:
+        # Skip whitelist check for public endpoints (no auth required)
+        public_paths = [
+            "/health",
+            "/ready",
+            "/.well-known/oauth-authorization-server",
+            "/.well-known/oauth-protected-resource",
+            "/authorize",  # OAuth authorization endpoint
+            "/token",      # OAuth token endpoint
+            "/auth/callback",  # OAuth callback handler
+        ]
+
+        # Check if path matches any public path (including subpaths)
+        if any(request.url.path.startswith(path) for path in public_paths):
             return await call_next(request)
 
         # Skip whitelist check if auth is disabled (local dev only)
