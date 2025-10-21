@@ -1,0 +1,363 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "search_speeches",
+  "description": "Hybrid search combining semantic similarity (pgvector HNSW) with metadata filtering for Australian Hansard speeches. Uses Vertex AI gemini-embedding-001 (768-dim) for query embeddings and Cloud SQL PostgreSQL for vector search.",
+  "type": "object",
+  "toolMetadata": {
+    "tags": ["search", "rag", "stable"],
+    "readOnlyHint": true,
+    "primaryUseCase": "Find speeches related to a topic/query with optional metadata filters",
+    "performanceTarget": {
+      "latency_p95": "200ms",
+      "throughput": "10-50 concurrent queries",
+      "cache_hit_rate": ">60% (via Redis)"
+    }
+  },
+  "input": {
+    "type": "object",
+    "required": ["query"],
+    "properties": {
+      "query": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1000,
+        "description": "Natural language search query or keywords",
+        "examples": [
+          "What is the government's climate change policy?",
+          "renewable energy transition",
+          "healthcare funding for regional areas"
+        ]
+      },
+      "speaker": {
+        "type": ["string", "null"],
+        "maxLength": 200,
+        "description": "Filter by speaker name (case-insensitive exact match)",
+        "examples": ["Anthony Albanese", "Peter Dutton", "Adam Bandt"]
+      },
+      "party": {
+        "type": ["string", "null"],
+        "maxLength": 100,
+        "description": "Filter by political party (case-insensitive exact match)",
+        "examples": ["Labor", "Liberal", "Greens", "National", "Independent"]
+      },
+      "chamber": {
+        "type": ["string", "null"],
+        "enum": ["House of Representatives", "Senate", null],
+        "description": "Filter by parliamentary chamber"
+      },
+      "date_from": {
+        "type": ["string", "null"],
+        "format": "date",
+        "description": "Filter speeches from this date onwards (ISO 8601: YYYY-MM-DD)",
+        "examples": ["2024-01-01"]
+      },
+      "date_to": {
+        "type": ["string", "null"],
+        "format": "date",
+        "description": "Filter speeches up to this date (ISO 8601: YYYY-MM-DD)",
+        "examples": ["2024-12-31"]
+      },
+      "topic_tags": {
+        "type": ["array", "null"],
+        "items": {
+          "type": "string",
+          "minLength": 1
+        },
+        "maxItems": 10,
+        "description": "Filter by topic tags (ANY match - OR logic)",
+        "examples": [["climate change", "environment"], ["healthcare", "aged care"]]
+      },
+      "state": {
+        "type": ["string", "null"],
+        "enum": ["NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT", null],
+        "description": "Filter by Australian state/territory"
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 50,
+        "default": 10,
+        "description": "Maximum number of results to return (top-K by relevance)"
+      },
+      "include_full_text": {
+        "type": "boolean",
+        "default": false,
+        "description": "Include complete speech text in results (default: excerpt only ~800 chars)"
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "required": [
+      "results",
+      "total_found",
+      "query_embedding_time_ms",
+      "search_time_ms"
+    ],
+    "properties": {
+      "results": {
+        "type": "array",
+        "description": "Search results ordered by relevance (descending)",
+        "items": {
+          "type": "object",
+          "required": [
+            "speech_id",
+            "chunk_id",
+            "excerpt",
+            "speaker",
+            "party",
+            "chamber",
+            "date",
+            "title",
+            "hansard_reference",
+            "topic_tags",
+            "relevance_score",
+            "chunk_index"
+          ],
+          "properties": {
+            "speech_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "UUID of parent speech"
+            },
+            "chunk_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "UUID of matching text chunk"
+            },
+            "excerpt": {
+              "type": "string",
+              "maxLength": 1000,
+              "description": "Matching text excerpt from chunk (~800 chars)"
+            },
+            "full_text": {
+              "type": ["string", "null"],
+              "description": "Complete speech text (only if include_full_text=true)"
+            },
+            "speaker": {
+              "type": "string",
+              "description": "Speaker name (MP/Senator)"
+            },
+            "party": {
+              "type": "string",
+              "description": "Political party affiliation"
+            },
+            "chamber": {
+              "type": "string",
+              "enum": ["House of Representatives", "Senate"],
+              "description": "Parliamentary chamber"
+            },
+            "date": {
+              "type": "string",
+              "format": "date",
+              "description": "Speech date (ISO 8601)"
+            },
+            "title": {
+              "type": "string",
+              "description": "Speech title/subject"
+            },
+            "hansard_reference": {
+              "type": "string",
+              "description": "Official Hansard citation for attribution"
+            },
+            "topic_tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Topic tags for this speech"
+            },
+            "relevance_score": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 1.0,
+              "description": "Cosine similarity score (0-1, higher is more relevant)"
+            },
+            "chunk_index": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Position of chunk in speech (0-based)"
+            }
+          }
+        }
+      },
+      "total_found": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Total number of results found (may be greater than limit)"
+      },
+      "query_embedding_time_ms": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Time taken to generate query embedding via Vertex AI (milliseconds)"
+      },
+      "search_time_ms": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Time taken for pgvector HNSW search + metadata filtering (milliseconds)"
+      }
+    }
+  },
+  "searchPipeline": {
+    "steps": [
+      "1. Generate query embedding (Vertex AI gemini-embedding-001, task_type=RETRIEVAL_QUERY, 768 dims)",
+      "2. Build metadata filter (speaker, party, chamber, date range, topic_tags, state)",
+      "3. Execute pgvector HNSW similarity search with cosine distance (hnsw.ef_search=40-80)",
+      "4. Apply metadata filters via PostgreSQL WHERE clauses",
+      "5. Return top-K results ordered by relevance_score (descending)",
+      "6. Optional: JOIN to speeches table for full_text (if include_full_text=true)"
+    ],
+    "indexConfiguration": {
+      "indexType": "HNSW",
+      "distanceMetric": "cosine",
+      "indexParameters": {
+        "m": 24,
+        "ef_construction": 100
+      },
+      "queryParameters": {
+        "ef_search": "40-80 (configurable for recall tuning)"
+      }
+    }
+  },
+  "errorHandling": {
+    "emptyQuery": {
+      "toolError": "Invalid input: query cannot be empty",
+      "httpStatus": 400
+    },
+    "invalidDateRange": {
+      "toolError": "Invalid input: date_from must be before date_to",
+      "httpStatus": 400
+    },
+    "vertexAiRateLimit": {
+      "toolError": "Vertex AI rate limit exceeded. Please try again in 60 seconds.",
+      "httpStatus": 429
+    },
+    "databaseError": {
+      "toolError": "Database query failed. Please check Cloud SQL instance is running.",
+      "httpStatus": 500
+    }
+  },
+  "examples": [
+    {
+      "name": "Basic search (no filters)",
+      "input": {
+        "query": "climate change policy",
+        "limit": 5
+      },
+      "output": {
+        "results": [
+          {
+            "speech_id": "550e8400-e29b-41d4-a716-446655440000",
+            "chunk_id": "660e8400-e29b-41d4-a716-446655440001",
+            "excerpt": "Mr Speaker, climate change is the defining challenge of our time. This government is committed to reducing emissions by 43% by 2030 and achieving net zero by 2050. Our renewable energy transition plan will create thousands of jobs while protecting the environment for future generations...",
+            "speaker": "Anthony Albanese",
+            "party": "Labor",
+            "chamber": "House of Representatives",
+            "date": "2024-03-23",
+            "title": "Second Reading: Climate Change Bill 2024",
+            "hansard_reference": "House Hansard, 23 March 2024, p.145",
+            "topic_tags": ["climate change", "environment", "energy policy"],
+            "relevance_score": 0.87,
+            "chunk_index": 0
+          }
+        ],
+        "total_found": 5,
+        "query_embedding_time_ms": 87.3,
+        "search_time_ms": 124.7
+      }
+    },
+    {
+      "name": "Search with speaker filter",
+      "input": {
+        "query": "renewable energy transition",
+        "speaker": "Adam Bandt",
+        "limit": 10
+      },
+      "output": {
+        "results": [
+          {
+            "speech_id": "770e8400-e29b-41d4-a716-446655440002",
+            "chunk_id": "880e8400-e29b-41d4-a716-446655440003",
+            "excerpt": "The Greens have long advocated for 100% renewable energy by 2030. This is not only achievable but essential for our climate future. We need bold action, not incremental change...",
+            "speaker": "Adam Bandt",
+            "party": "Greens",
+            "chamber": "House of Representatives",
+            "date": "2024-05-12",
+            "title": "Renewable Energy Transition Debate",
+            "hansard_reference": "House Hansard, 12 May 2024, p.234",
+            "topic_tags": ["renewable energy", "climate change", "greens policy"],
+            "relevance_score": 0.92,
+            "chunk_index": 2
+          }
+        ],
+        "total_found": 3,
+        "query_embedding_time_ms": 91.2,
+        "search_time_ms": 143.8
+      }
+    },
+    {
+      "name": "Search with multiple filters",
+      "input": {
+        "query": "healthcare funding",
+        "chamber": "Senate",
+        "party": "Labor",
+        "date_from": "2024-01-01",
+        "date_to": "2024-06-30",
+        "topic_tags": ["healthcare", "budget"],
+        "limit": 5,
+        "include_full_text": false
+      },
+      "output": {
+        "results": [
+          {
+            "speech_id": "990e8400-e29b-41d4-a716-446655440004",
+            "chunk_id": "aa0e8400-e29b-41d4-a716-446655440005",
+            "excerpt": "This budget delivers record healthcare funding of $8.2 billion for hospitals, mental health services, and preventative care. Regional communities will benefit from expanded GP access and telehealth services...",
+            "speaker": "Penny Wong",
+            "party": "Labor",
+            "chamber": "Senate",
+            "date": "2024-05-20",
+            "title": "Budget 2024: Healthcare Appropriations",
+            "hansard_reference": "Senate Hansard, 20 May 2024, p.89",
+            "topic_tags": ["healthcare", "budget", "regional services"],
+            "relevance_score": 0.84,
+            "chunk_index": 5
+          }
+        ],
+        "total_found": 2,
+        "query_embedding_time_ms": 94.5,
+        "search_time_ms": 167.3
+      }
+    },
+    {
+      "name": "Search with full text included",
+      "input": {
+        "query": "indigenous reconciliation",
+        "limit": 2,
+        "include_full_text": true
+      },
+      "output": {
+        "results": [
+          {
+            "speech_id": "bb0e8400-e29b-41d4-a716-446655440006",
+            "chunk_id": "cc0e8400-e29b-41d4-a716-446655440007",
+            "excerpt": "Reconciliation requires truth-telling, treaty, and voice. We must listen to First Nations people and walk together towards a better future...",
+            "full_text": "[Complete speech text of ~12,000 characters would be included here]",
+            "speaker": "Linda Burney",
+            "party": "Labor",
+            "chamber": "House of Representatives",
+            "date": "2024-02-13",
+            "title": "Indigenous Reconciliation Framework",
+            "hansard_reference": "House Hansard, 13 February 2024, p.56",
+            "topic_tags": ["indigenous", "reconciliation", "first nations"],
+            "relevance_score": 0.89,
+            "chunk_index": 0
+          }
+        ],
+        "total_found": 2,
+        "query_embedding_time_ms": 88.1,
+        "search_time_ms": 198.4
+      }
+    }
+  ]
+}

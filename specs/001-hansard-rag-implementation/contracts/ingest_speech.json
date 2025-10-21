@@ -1,0 +1,278 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ingest_speech",
+  "description": "Ingest a single Australian Hansard speech: validate metadata, chunk text, generate embeddings (Vertex AI gemini-embedding-001), and store in Cloud SQL PostgreSQL + pgvector",
+  "type": "object",
+  "toolMetadata": {
+    "tags": ["ingest", "write", "stable"],
+    "readOnlyHint": false,
+    "primaryUseCase": "Add new speeches to the RAG system",
+    "performanceTarget": {
+      "latency_p95": "2000ms",
+      "throughput": "1-5 speeches/second"
+    }
+  },
+  "input": {
+    "type": "object",
+    "required": [
+      "title",
+      "full_text",
+      "speaker",
+      "party",
+      "chamber",
+      "state",
+      "date",
+      "hansard_reference"
+    ],
+    "properties": {
+      "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500,
+        "description": "Speech title or subject",
+        "examples": ["Second Reading: Climate Change Bill 2024"]
+      },
+      "full_text": {
+        "type": "string",
+        "minLength": 10,
+        "description": "Complete speech transcript (verbatim from Hansard)",
+        "examples": ["Mr Speaker, I rise to speak on the Climate Change Bill..."]
+      },
+      "speaker": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "Full name of MP/Senator",
+        "examples": ["Anthony Albanese", "Peter Dutton", "Adam Bandt"]
+      },
+      "party": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100,
+        "description": "Political party affiliation",
+        "examples": ["Labor", "Liberal", "Greens", "National", "Independent"]
+      },
+      "chamber": {
+        "type": "string",
+        "enum": ["House of Representatives", "Senate"],
+        "description": "Australian parliamentary chamber"
+      },
+      "electorate": {
+        "type": ["string", "null"],
+        "maxLength": 100,
+        "description": "Electorate name (required for House members, null for Senators)",
+        "examples": ["Grayndler", "Dickson", "Melbourne", null]
+      },
+      "state": {
+        "type": "string",
+        "enum": ["NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT"],
+        "description": "Australian state or territory"
+      },
+      "date": {
+        "type": "string",
+        "format": "date",
+        "description": "Speech date in ISO 8601 format (YYYY-MM-DD)",
+        "examples": ["2024-03-23"]
+      },
+      "hansard_reference": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500,
+        "description": "Official Hansard citation for attribution",
+        "examples": ["House Hansard, 23 March 2024, p.145"]
+      },
+      "topic_tags": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        },
+        "maxItems": 20,
+        "default": [],
+        "description": "Topic tags for categorization (normalized to lowercase)",
+        "examples": [["climate change", "environment", "energy policy"]]
+      },
+      "source_url": {
+        "type": ["string", "null"],
+        "format": "uri",
+        "maxLength": 1000,
+        "description": "Source URL to official Hansard record (optional)",
+        "examples": ["https://www.aph.gov.au/Parliamentary_Business/Hansard"]
+      },
+      "skip_if_duplicate": {
+        "type": "boolean",
+        "default": true,
+        "description": "Skip ingestion if speech already exists (based on SHA-256 content hash)"
+      }
+    },
+    "validation": {
+      "electorate_chamber_consistency": "If chamber='Senate', electorate must be null. If chamber='House of Representatives', electorate is required.",
+      "content_hash": "SHA-256 hash of full_text used for duplicate detection",
+      "topic_tags_normalization": "Tags are normalized to lowercase and whitespace trimmed"
+    }
+  },
+  "output": {
+    "type": "object",
+    "required": [
+      "speech_id",
+      "status",
+      "chunks_created",
+      "embeddings_generated",
+      "total_time_ms",
+      "embedding_time_ms",
+      "word_count",
+      "content_hash"
+    ],
+    "properties": {
+      "speech_id": {
+        "type": ["string", "null"],
+        "format": "uuid",
+        "description": "UUID of ingested speech (null if skipped due to duplicate)"
+      },
+      "status": {
+        "type": "string",
+        "enum": ["created", "skipped"],
+        "description": "Ingestion status: 'created' for new speech, 'skipped' if duplicate"
+      },
+      "chunks_created": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Number of text chunks generated (RecursiveCharacterTextSplitter: 800 chars, 150 overlap)"
+      },
+      "embeddings_generated": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Number of 768-dimensional embeddings created via Vertex AI gemini-embedding-001"
+      },
+      "total_time_ms": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Total ingestion time in milliseconds (validation + chunking + embedding + database insert)"
+      },
+      "embedding_time_ms": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Time spent generating embeddings via Vertex AI (milliseconds)"
+      },
+      "word_count": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Word count of full_text (space-separated)"
+      },
+      "content_hash": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$",
+        "description": "SHA-256 hash of full_text for deduplication"
+      }
+    }
+  },
+  "pipeline": {
+    "steps": [
+      "1. Pydantic validation (SpeechMetadata model)",
+      "2. Duplicate check via content_hash (SHA-256)",
+      "3. Insert into speeches table (Cloud SQL PostgreSQL)",
+      "4. Text chunking (RecursiveCharacterTextSplitter: 800 chars, 150 overlap)",
+      "5. Embedding generation (Vertex AI gemini-embedding-001, task_type=RETRIEVAL_DOCUMENT, 768 dims)",
+      "6. Insert chunks into speech_chunks table with embeddings",
+      "7. HNSW index automatically updated (m=24, ef_construction=100)"
+    ]
+  },
+  "errorHandling": {
+    "validationError": {
+      "toolError": "Invalid input: {specific_validation_error}",
+      "httpStatus": 400
+    },
+    "duplicateDetected": {
+      "behavior": "Return status='skipped', speech_id=null (not an error)",
+      "httpStatus": 200
+    },
+    "vertexAiRateLimit": {
+      "toolError": "Vertex AI rate limit exceeded. Please try again in 60 seconds.",
+      "httpStatus": 429
+    },
+    "databaseError": {
+      "toolError": "Database error. Please check Cloud SQL instance is running.",
+      "httpStatus": 500
+    }
+  },
+  "examples": [
+    {
+      "name": "Ingest House of Representatives speech",
+      "input": {
+        "title": "Second Reading: Climate Change Bill 2024",
+        "full_text": "Mr Speaker, I rise to speak on the Climate Change Bill 2024. This legislation represents a critical step forward in Australia's commitment to reducing greenhouse gas emissions and transitioning to renewable energy. The bill establishes clear targets for net zero emissions by 2050 and interim targets for 2030...",
+        "speaker": "Anthony Albanese",
+        "party": "Labor",
+        "chamber": "House of Representatives",
+        "electorate": "Grayndler",
+        "state": "NSW",
+        "date": "2024-03-23",
+        "hansard_reference": "House Hansard, 23 March 2024, p.145",
+        "topic_tags": ["climate change", "environment", "energy policy"],
+        "source_url": "https://www.aph.gov.au/Parliamentary_Business/Hansard/Hansard_Display?bid=chamber/hansardr/27459/&sid=0145",
+        "skip_if_duplicate": true
+      },
+      "output": {
+        "speech_id": "550e8400-e29b-41d4-a716-446655440000",
+        "status": "created",
+        "chunks_created": 15,
+        "embeddings_generated": 15,
+        "total_time_ms": 1847.3,
+        "embedding_time_ms": 1234.5,
+        "word_count": 2847,
+        "content_hash": "a3b2c1d4e5f6789012345678901234567890abcdef1234567890abcdef123456"
+      }
+    },
+    {
+      "name": "Ingest Senate speech",
+      "input": {
+        "title": "Renewable Energy Target Amendment",
+        "full_text": "Mr President, I speak today on the Renewable Energy Target Amendment Bill...",
+        "speaker": "Penny Wong",
+        "party": "Labor",
+        "chamber": "Senate",
+        "electorate": null,
+        "state": "SA",
+        "date": "2024-04-15",
+        "hansard_reference": "Senate Hansard, 15 April 2024, p.87",
+        "topic_tags": ["renewable energy", "environment"],
+        "skip_if_duplicate": true
+      },
+      "output": {
+        "speech_id": "660e8400-e29b-41d4-a716-446655440001",
+        "status": "created",
+        "chunks_created": 8,
+        "embeddings_generated": 8,
+        "total_time_ms": 987.2,
+        "embedding_time_ms": 645.1,
+        "word_count": 1423,
+        "content_hash": "b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3"
+      }
+    },
+    {
+      "name": "Duplicate speech (skipped)",
+      "input": {
+        "title": "Second Reading: Climate Change Bill 2024",
+        "full_text": "Mr Speaker, I rise to speak on the Climate Change Bill 2024...",
+        "speaker": "Anthony Albanese",
+        "party": "Labor",
+        "chamber": "House of Representatives",
+        "electorate": "Grayndler",
+        "state": "NSW",
+        "date": "2024-03-23",
+        "hansard_reference": "House Hansard, 23 March 2024, p.145",
+        "skip_if_duplicate": true
+      },
+      "output": {
+        "speech_id": null,
+        "status": "skipped",
+        "chunks_created": 0,
+        "embeddings_generated": 0,
+        "total_time_ms": 23.7,
+        "embedding_time_ms": 0,
+        "word_count": 2847,
+        "content_hash": "a3b2c1d4e5f6789012345678901234567890abcdef1234567890abcdef123456"
+      }
+    }
+  ]
+}
