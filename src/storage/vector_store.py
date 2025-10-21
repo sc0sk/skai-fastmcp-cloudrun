@@ -53,13 +53,16 @@ class VectorStoreService:
 
         # Create embedding service if not provided
         if embedding_service is None:
-            self.embeddings = VertexAIEmbeddings(
-                model_name="gemini-embedding-001",
-                project=self.project_id,
+            from src.storage.embeddings import LangChainEmbeddingsWrapper
+            # Use wrapper directly for LangChain PostgresVectorStore compatibility
+            self.embeddings = LangChainEmbeddingsWrapper(
+                project_id=self.project_id,
                 location=os.getenv("VERTEX_AI_LOCATION", "us-central1"),
+                model_name="text-embedding-005",
+                output_dimensionality=768
             )
         else:
-            # If provided a custom EmbeddingService, extract the VertexAIEmbeddings instance
+            # If provided a custom EmbeddingService, extract wrapper if available
             if hasattr(embedding_service, 'embeddings'):
                 self.embeddings = embedding_service.embeddings
             else:
