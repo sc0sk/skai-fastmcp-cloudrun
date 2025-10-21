@@ -110,10 +110,12 @@ async def ingest_markdown_speeches(
             )
 
             # Add to metadata store (checks for duplicates via content_hash)
+            is_duplicate = False
             try:
                 speech_id = await metadata_store.add_speech(speech)
             except ValueError as e:
-                # Duplicate detected
+                # Duplicate detected - skip this file entirely
+                # (Chunk creation should have happened on first ingestion)
                 duplicates_skipped += 1
                 continue
 
@@ -134,7 +136,7 @@ async def ingest_markdown_speeches(
                     "party": speech.party,
                     "chamber": speech.chamber,
                     "state": speech.state,
-                    "date": speech.date.isoformat(),
+                    "date": speech.date,  # Pass date object directly, not ISO string
                     "hansard_reference": speech.hansard_reference,
                 })
 
