@@ -1,0 +1,346 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "get_speech",
+  "description": "Retrieve complete Australian Hansard speech by UUID with all metadata, optional text chunks, and chronological context (previous/next speeches in same chamber).",
+  "type": "object",
+  "toolMetadata": {
+    "tags": ["retrieve", "rag", "stable"],
+    "readOnlyHint": true,
+    "primaryUseCase": "Get full speech text and metadata after finding it via search",
+    "performanceTarget": {
+      "latency_p95": "50ms",
+      "throughput": "50-100 concurrent requests"
+    }
+  },
+  "input": {
+    "type": "object",
+    "required": ["speech_id"],
+    "properties": {
+      "speech_id": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+        "description": "UUID of the speech to retrieve",
+        "examples": ["550e8400-e29b-41d4-a716-446655440000"]
+      },
+      "include_chunks": {
+        "type": "boolean",
+        "default": false,
+        "description": "Include individual text chunks with chunk IDs and positions (default: full text only)"
+      },
+      "include_context": {
+        "type": "boolean",
+        "default": false,
+        "description": "Include chronological context (previous/next speeches in same chamber)"
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "required": [
+      "speech_id",
+      "title",
+      "full_text",
+      "word_count",
+      "speaker",
+      "party",
+      "chamber",
+      "state",
+      "date",
+      "hansard_reference",
+      "topic_tags",
+      "ingestion_timestamp"
+    ],
+    "properties": {
+      "speech_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "UUID of the speech"
+      },
+      "title": {
+        "type": "string",
+        "description": "Speech title or subject"
+      },
+      "full_text": {
+        "type": "string",
+        "description": "Complete speech transcript (verbatim from Hansard)"
+      },
+      "word_count": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Total word count (space-separated)"
+      },
+      "speaker": {
+        "type": "string",
+        "description": "Full name of MP/Senator"
+      },
+      "party": {
+        "type": "string",
+        "description": "Political party affiliation"
+      },
+      "chamber": {
+        "type": "string",
+        "enum": ["House of Representatives", "Senate"],
+        "description": "Parliamentary chamber"
+      },
+      "electorate": {
+        "type": ["string", "null"],
+        "description": "Electorate name (for House members, null for Senators)"
+      },
+      "state": {
+        "type": "string",
+        "enum": ["NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT"],
+        "description": "Australian state or territory"
+      },
+      "date": {
+        "type": "string",
+        "format": "date",
+        "description": "Speech date (ISO 8601: YYYY-MM-DD)"
+      },
+      "hansard_reference": {
+        "type": "string",
+        "description": "Official Hansard citation for attribution"
+      },
+      "topic_tags": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Topic tags for categorization"
+      },
+      "source_url": {
+        "type": ["string", "null"],
+        "format": "uri",
+        "description": "Source URL to official Hansard record (if available)"
+      },
+      "ingestion_timestamp": {
+        "type": "string",
+        "format": "date-time",
+        "description": "When speech was ingested into the system (ISO 8601 with timezone)"
+      },
+      "chunks": {
+        "type": ["array", "null"],
+        "description": "Individual text chunks (only if include_chunks=true)",
+        "items": {
+          "type": "object",
+          "required": ["chunk_id", "chunk_index", "chunk_text", "chunk_size"],
+          "properties": {
+            "chunk_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "UUID of the chunk"
+            },
+            "chunk_index": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Position in speech (0-based, sequential)"
+            },
+            "chunk_text": {
+              "type": "string",
+              "description": "Text content of chunk (~800 chars)"
+            },
+            "chunk_size": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Character count of chunk"
+            }
+          }
+        }
+      },
+      "context": {
+        "type": ["object", "null"],
+        "description": "Chronological context (only if include_context=true)",
+        "properties": {
+          "previous_speech": {
+            "type": ["object", "null"],
+            "description": "Previous speech in same chamber (by date)",
+            "properties": {
+              "speech_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "title": {
+                "type": "string"
+              },
+              "speaker": {
+                "type": "string"
+              },
+              "date": {
+                "type": "string",
+                "format": "date"
+              }
+            },
+            "required": ["speech_id", "title", "speaker", "date"]
+          },
+          "next_speech": {
+            "type": ["object", "null"],
+            "description": "Next speech in same chamber (by date)",
+            "properties": {
+              "speech_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "title": {
+                "type": "string"
+              },
+              "speaker": {
+                "type": "string"
+              },
+              "date": {
+                "type": "string",
+                "format": "date"
+              }
+            },
+            "required": ["speech_id", "title", "speaker", "date"]
+          }
+        }
+      }
+    }
+  },
+  "queryStrategy": {
+    "primaryQuery": "SELECT * FROM speeches WHERE speech_id = $1",
+    "chunksQuery": "SELECT chunk_id, chunk_index, chunk_text, chunk_size FROM speech_chunks WHERE speech_id = $1 ORDER BY chunk_index",
+    "previousSpeechQuery": "SELECT speech_id, title, speaker, date FROM speeches WHERE date < $1 AND chamber = $2 ORDER BY date DESC LIMIT 1",
+    "nextSpeechQuery": "SELECT speech_id, title, speaker, date FROM speeches WHERE date > $1 AND chamber = $2 ORDER BY date ASC LIMIT 1"
+  },
+  "errorHandling": {
+    "speechNotFound": {
+      "toolError": "Speech not found: {speech_id}",
+      "httpStatus": 404
+    },
+    "invalidUuid": {
+      "toolError": "Invalid input: speech_id must be a valid UUID",
+      "httpStatus": 400
+    },
+    "databaseError": {
+      "toolError": "Database query failed. Please check Cloud SQL instance is running.",
+      "httpStatus": 500
+    }
+  },
+  "examples": [
+    {
+      "name": "Basic retrieval (no chunks, no context)",
+      "input": {
+        "speech_id": "550e8400-e29b-41d4-a716-446655440000",
+        "include_chunks": false,
+        "include_context": false
+      },
+      "output": {
+        "speech_id": "550e8400-e29b-41d4-a716-446655440000",
+        "title": "Second Reading: Climate Change Bill 2024",
+        "full_text": "Mr Speaker, I rise to speak on the Climate Change Bill 2024. This legislation represents a critical step forward in Australia's commitment to reducing greenhouse gas emissions and transitioning to renewable energy. [... complete speech text continues for ~12,000 characters ...]",
+        "word_count": 2847,
+        "speaker": "Anthony Albanese",
+        "party": "Labor",
+        "chamber": "House of Representatives",
+        "electorate": "Grayndler",
+        "state": "NSW",
+        "date": "2024-03-23",
+        "hansard_reference": "House Hansard, 23 March 2024, p.145",
+        "topic_tags": ["climate change", "environment", "energy policy"],
+        "source_url": "https://www.aph.gov.au/Parliamentary_Business/Hansard/Hansard_Display?bid=chamber/hansardr/27459/&sid=0145",
+        "ingestion_timestamp": "2024-03-24T10:23:45.678Z"
+      }
+    },
+    {
+      "name": "Retrieval with chunks",
+      "input": {
+        "speech_id": "550e8400-e29b-41d4-a716-446655440000",
+        "include_chunks": true,
+        "include_context": false
+      },
+      "output": {
+        "speech_id": "550e8400-e29b-41d4-a716-446655440000",
+        "title": "Second Reading: Climate Change Bill 2024",
+        "full_text": "[Complete speech text]",
+        "word_count": 2847,
+        "speaker": "Anthony Albanese",
+        "party": "Labor",
+        "chamber": "House of Representatives",
+        "electorate": "Grayndler",
+        "state": "NSW",
+        "date": "2024-03-23",
+        "hansard_reference": "House Hansard, 23 March 2024, p.145",
+        "topic_tags": ["climate change", "environment", "energy policy"],
+        "source_url": "https://www.aph.gov.au/Parliamentary_Business/Hansard",
+        "ingestion_timestamp": "2024-03-24T10:23:45.678Z",
+        "chunks": [
+          {
+            "chunk_id": "660e8400-e29b-41d4-a716-446655440001",
+            "chunk_index": 0,
+            "chunk_text": "Mr Speaker, I rise to speak on the Climate Change Bill 2024. This legislation represents a critical step forward in Australia's commitment to reducing greenhouse gas emissions and transitioning to renewable energy. The bill establishes clear targets for net zero emissions by 2050 and interim targets for 2030, including a 43% reduction in emissions relative to 2005 levels. These targets are science-based and align with international best practice...",
+            "chunk_size": 782
+          },
+          {
+            "chunk_id": "770e8400-e29b-41d4-a716-446655440002",
+            "chunk_index": 1,
+            "chunk_text": "Our renewable energy transition plan will create thousands of jobs in solar, wind, and battery storage industries. Regional communities will benefit from new manufacturing facilities and training programs. The government is investing $20 billion in renewable energy infrastructure through the National Reconstruction Fund...",
+            "chunk_size": 798
+          }
+        ]
+      }
+    },
+    {
+      "name": "Retrieval with context",
+      "input": {
+        "speech_id": "550e8400-e29b-41d4-a716-446655440000",
+        "include_chunks": false,
+        "include_context": true
+      },
+      "output": {
+        "speech_id": "550e8400-e29b-41d4-a716-446655440000",
+        "title": "Second Reading: Climate Change Bill 2024",
+        "full_text": "[Complete speech text]",
+        "word_count": 2847,
+        "speaker": "Anthony Albanese",
+        "party": "Labor",
+        "chamber": "House of Representatives",
+        "electorate": "Grayndler",
+        "state": "NSW",
+        "date": "2024-03-23",
+        "hansard_reference": "House Hansard, 23 March 2024, p.145",
+        "topic_tags": ["climate change", "environment", "energy policy"],
+        "source_url": "https://www.aph.gov.au/Parliamentary_Business/Hansard",
+        "ingestion_timestamp": "2024-03-24T10:23:45.678Z",
+        "context": {
+          "previous_speech": {
+            "speech_id": "440e8400-e29b-41d4-a716-446655440008",
+            "title": "Budget Reply: Economic Outlook",
+            "speaker": "Jim Chalmers",
+            "date": "2024-03-22"
+          },
+          "next_speech": {
+            "speech_id": "880e8400-e29b-41d4-a716-446655440009",
+            "title": "Climate Bill Amendment Proposal",
+            "speaker": "Peter Dutton",
+            "date": "2024-03-23"
+          }
+        }
+      }
+    },
+    {
+      "name": "Senate speech (no electorate)",
+      "input": {
+        "speech_id": "990e8400-e29b-41d4-a716-446655440004",
+        "include_chunks": false,
+        "include_context": false
+      },
+      "output": {
+        "speech_id": "990e8400-e29b-41d4-a716-446655440004",
+        "title": "Budget 2024: Healthcare Appropriations",
+        "full_text": "[Complete speech text]",
+        "word_count": 1834,
+        "speaker": "Penny Wong",
+        "party": "Labor",
+        "chamber": "Senate",
+        "electorate": null,
+        "state": "SA",
+        "date": "2024-05-20",
+        "hansard_reference": "Senate Hansard, 20 May 2024, p.89",
+        "topic_tags": ["healthcare", "budget", "regional services"],
+        "source_url": "https://www.aph.gov.au/Parliamentary_Business/Hansard",
+        "ingestion_timestamp": "2024-05-21T08:14:32.123Z"
+      }
+    }
+  ]
+}

@@ -107,7 +107,7 @@ All server code MUST be written in Python using Pydantic for data validation:
 ### IX. ChatGPT Integration Standards
 
 Servers MUST be compatible with ChatGPT Developer Mode and MCP connectors:
-- Server accessible via public internet (Cloud Run or ngrok for dev)
+- Server accessible via public internet (Cloud Run for dev)
 - HTTP transport on standard port (8000 dev, 8080 Cloud Run)
 - MCP endpoint at `/mcp/` path
 - Support both Chat Mode and Deep Research Mode
@@ -2188,7 +2188,7 @@ This architecture follows Google's Agent Development Kit (ADK) patterns, which u
 **Technology Stack**:
 - **Compute**: Google Cloud Run (FastMCP server)
 - **Vector Database**: Cloud SQL PostgreSQL with pgvector extension (v0.8.0)
-- **Embeddings**: Vertex AI textembedding-gecko@003 (768 dimensions)
+- **Embeddings**: Vertex AI gemini-embedding-001 (768 dimensions, scalable to 3072)
 - **Framework**: LangChain (Google ADK standard)
 - **Cache**: Cloud Memorystore for Redis
 - **Secrets**: Google Secret Manager
@@ -2228,7 +2228,7 @@ This architecture follows Google's Agent Development Kit (ADK) patterns, which u
    - ACID transactions across all data
 
 4. **Superior Embeddings** ✅
-   - Vertex AI textembedding-gecko (768 dims) vs sentence-transformers (384 dims)
+   - Vertex AI gemini-embedding-001 (768+ dims) vs sentence-transformers (384 dims)
    - Higher quality semantic search
    - Native Google Cloud integration
    - No container memory overhead (API-based)
@@ -2287,7 +2287,7 @@ Configuration:
   Storage: 20GB SSD
   Version: PostgreSQL 15
   Extensions: vector (pgvector 0.8.0)
-  Dimensions: 768 (Vertex AI textembedding-gecko)
+  Dimensions: 768 (Vertex AI gemini-embedding-001)
   Index: HNSW (m=16, ef_construction=64)
   Backups: Automated daily
   High Availability: No (add in production: +$50/month)
@@ -2529,7 +2529,7 @@ async def get_speech_full_text(
 
 **Key Features**:
 1. ✅ **LangChain Integration**: Uses `langchain-google-vertexai` + `langchain-google-cloud-sql-pg`
-2. ✅ **Vertex AI Embeddings**: 768-dim textembedding-gecko (superior quality)
+2. ✅ **Vertex AI Embeddings**: 768-dim gemini-embedding-001 (state-of-the-art quality)
 3. ✅ **Full Text Retrieval**: `search_speeches` returns both chunk excerpt AND complete speech
 4. ✅ **Hybrid Search**: Vector similarity + metadata filtering (party, chamber, topics)
 5. ✅ **Google ADK Aligned**: Follows Google's agent development patterns
@@ -2589,15 +2589,39 @@ splitter = RecursiveCharacterTextSplitter(
 #### Embedding Model (NON-NEGOTIABLE)
 
 ```python
-from sentence_transformers import SentenceTransformer
+from langchain_google_vertexai import VertexAIEmbeddings
 
-model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
-# Dimensions: 384
-# Speed: ~50ms per chunk on 1 vCPU
-# Quality: Optimized for semantic similarity
+embeddings = VertexAIEmbeddings(
+    model_name="gemini-embedding-001",
+    project=GOOGLE_CLOUD_PROJECT,
+    task_type="RETRIEVAL_DOCUMENT",  # For document ingestion
+    output_dimensionality=768
+)
+
+# For query embeddings
+query_embeddings = VertexAIEmbeddings(
+    model_name="gemini-embedding-001",
+    project=GOOGLE_CLOUD_PROJECT,
+    task_type="RETRIEVAL_QUERY",  # For search queries
+    output_dimensionality=768
+)
+
+# Specifications:
+# - Dimensions: 768 (scalable to 1536 or 3072 for improved quality)
+# - Speed: ~50-100ms per chunk (API call)
+# - Quality: State-of-the-art semantic understanding, #1 on MTEB Multilingual
+# - Cost: $0.15 per 1M tokens (dimension size does not affect pricing)
+# - Languages: 100+ (supports multilingual parliamentary content)
 ```
 
-**Alternative** (if quality issues): `BAAI/bge-large-en-v1.5` (1024 dims, slower but better quality)
+**Rationale**:
+- **Model**: gemini-embedding-001 is Google's state-of-the-art embedding model (2025)
+- **Political Discourse**: Superior performance on classification, sentiment, and complex institutional language
+- **Task Types**: RETRIEVAL_DOCUMENT for ingestion, RETRIEVAL_QUERY for search (optimizes embeddings for each use case)
+- **Dimensions**: 768-dim balances performance/storage; scalable to 3072-dim without cost increase
+- **Benchmarks**: #1 on MTEB Multilingual leaderboard, excels at political text classification
+- **Integration**: Native Google Cloud, eliminates in-container model memory requirements
+- **Future-proof**: Gemini family is Google's recommended solution, replaces deprecated gecko/text-embedding models
 
 #### Metadata Schema (NON-NEGOTIABLE)
 
@@ -2632,8 +2656,10 @@ speech_metadata = {
 ```
 
 **Storage Distribution**:
-- **Qdrant**: `chunk_text`, `embedding`, `speech_id`, `speaker`, `date`, `topic_tags`, `chunk_index`
-- **PostgreSQL**: Full speech text, all metadata, relational tables (speakers, events, topics)
+- **Cloud SQL (pgvector)**: `chunk_text`, `embedding` (768-dim vector), `speech_id`, `speaker`, `date`, `topic_tags`, `chunk_index`
+- **Cloud SQL (PostgreSQL)**: Full speech text, all metadata, relational tables (speakers, events, topics)
+
+**Note**: Single database solution - Cloud SQL PostgreSQL with pgvector extension handles both vector search and relational data.
 
 ### MCP Tools Specification
 
@@ -2655,7 +2681,7 @@ async def search_speeches(
     """
     Hybrid search combining semantic similarity with metadata filtering.
 
-    Uses vector search (Qdrant HNSW) + metadata filters + Redis caching.
+    Uses vector search (pgvector HNSW) + metadata filters + Redis caching.
     """
 ```
 
@@ -2728,15 +2754,15 @@ Speech Text (raw)
    ├─> RecursiveCharacterTextSplitter (800 chars, 150 overlap)
    │   └─> Chunks with position metadata
    │
-   ├─> sentence-transformers/all-MiniLM-L6-v2
-   │   └─> Embeddings (384 dimensions)
+   ├─> Vertex AI gemini-embedding-001
+   │   └─> Embeddings (768 dimensions)
    │
    ├─> Metadata Extraction & Validation (Pydantic)
    │   └─> {speaker, date, topic_tags, event, etc.}
    │
-   └─> Parallel Storage:
-       ├─> Qdrant.upsert({embedding, chunk_text, metadata})
-       └─> PostgreSQL.insert({full_text, metadata, relations})
+   └─> Cloud SQL PostgreSQL Storage:
+       ├─> speech_chunks.upsert({embedding (pgvector), chunk_text, metadata})
+       └─> speeches.insert({full_text, metadata, relations})
 
 ┌──────────────────────────────────────────────────────────────┐
 │ SEARCH REQUEST FLOW (Real-time)                              │
@@ -2750,15 +2776,15 @@ MCP Client (Claude/Cursor/ChatGPT)
        │   └─> MISS: Continue to vector search
        │
        ├─> Generate Query Embedding
-       │   └─> sentence-transformers (in-memory, ~50ms)
+       │   └─> Vertex AI gemini-embedding-001 (API call, ~50-100ms)
        │
-       ├─> Qdrant Hybrid Search
-       │   ├─> Vector similarity (HNSW index, <50ms)
+       ├─> Cloud SQL pgvector Hybrid Search
+       │   ├─> Vector similarity (HNSW index, 100-200ms)
        │   ├─> Metadata filtering (speaker, date, topics)
        │   └─> Top-K results with scores
        │
-       ├─> PostgreSQL Enrichment (optional)
-       │   └─> Full speech text, additional context
+       ├─> PostgreSQL Full Text Enrichment (single query)
+       │   └─> JOIN to speeches table for full speech text + context
        │
        ├─> Cache Results in Redis (TTL: 300s)
        │
@@ -2768,18 +2794,26 @@ MCP Client (Claude/Cursor/ChatGPT)
 
 ### Capacity Planning
 
-| Scale | Speeches | Chunks | Vectors | Qdrant Tier | PostgreSQL | Monthly Cost |
-|-------|----------|--------|---------|-------------|------------|--------------|
-| **Prototype** | 1,000 | 15,000 | 15,000 | Free (1GB) | 10GB | ~$47/month |
-| **Production v1** | 10,000 | 150,000 | 150,000 | Paid (5GB) | 20GB | ~$72/month |
-| **Scale** | 100,000 | 1.5M | 1.5M | Paid (20GB) | 50GB | ~$180/month |
+| Scale | Speeches | Chunks | Vectors (768-dim) | Cloud SQL (pgvector) | Monthly Cost |
+|-------|----------|--------|-------------------|----------------------|--------------|
+| **Prototype** | 1,000 | 15,000 | 15,000 | 10GB SSD | ~$30/month |
+| **Production v1** | 10,000 | 150,000 | 150,000 | 20GB SSD | ~$100/month |
+| **Scale** | 100,000 | 1.5M | 1.5M | 100GB SSD | ~$300/month |
 
 **Current Target**: Production v1 (10,000 speeches)
 
+**Cost Breakdown** (Production v1):
+- Cloud SQL PostgreSQL (20GB): ~$60/month
+- Cloud Run (512MB, 1 vCPU): ~$15/month
+- Redis (Cloud Memorystore 1GB): ~$20/month
+- Vertex AI Embeddings: ~$2/month (query-only, ~1000 searches)
+- Total: ~$100/month
+
 ### Performance Requirements
 
-- **Search Latency**: <100ms p95 (uncached), <20ms p95 (cached)
-- **Embedding Generation**: <100ms per chunk
+- **Search Latency**: <200ms p95 (uncached), <20ms p95 (cached)
+- **Embedding Generation**: 50-100ms per chunk (Vertex AI API)
+- **Vector Search**: 100-200ms p95 (pgvector HNSW)
 - **Availability**: 99.5% (Cloud Run SLA)
 - **Concurrent Users**: 10-50 (auto-scaling)
 - **Cache Hit Rate**: >60% for common queries
