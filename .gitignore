@@ -52,6 +52,7 @@ htmlcov/
 data/speeches.db
 data/*.db
 data/*.sqlite
+data/*.json
 *.db
 *.sqlite
 

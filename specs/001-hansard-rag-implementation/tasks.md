@@ -54,14 +54,14 @@
 
 ### Tasks
 
-- [ ] T001 Create project directory structure per plan.md (src/, tests/, data/, deployment/)
-- [ ] T002 Initialize Python project with uv package manager (pyproject.toml)
-- [ ] T003 Create fastmcp.json configuration with LangChain dependencies
-- [ ] T004 Add core dependencies to pyproject.toml (fastmcp>=2.14.0, langchain-google-vertexai>=2.0.0, langchain-google-cloud-sql-pg>=0.12.0, pydantic>=2.5.0)
-- [ ] T005 Add development dependencies to pyproject.toml (pytest, pytest-asyncio, pytest-cov, black, ruff, mypy)
-- [ ] T006 Create .env.example file with environment variable templates (GCP_PROJECT_ID, CLOUDSQL_INSTANCE, REGION)
-- [ ] T007 Create .gitignore file (exclude .env, *.db, __pycache__, .pytest_cache, data/*.json)
-- [ ] T008 Create README.md with local development setup instructions (installation, configuration, running tests, using MCP Inspector)
+- [X] T001 Create project directory structure per plan.md (src/, tests/, data/, deployment/)
+- [X] T002 Initialize Python project with uv package manager (pyproject.toml)
+- [X] T003 Create fastmcp.json configuration with LangChain dependencies
+- [X] T004 Add core dependencies to pyproject.toml (fastmcp>=2.14.0, langchain-google-vertexai>=2.0.0, langchain-google-cloud-sql-pg>=0.12.0, pydantic>=2.5.0)
+- [X] T005 Add development dependencies to pyproject.toml (pytest, pytest-asyncio, pytest-cov, black, ruff, mypy)
+- [X] T006 Create .env.example file with environment variable templates (GCP_PROJECT_ID, CLOUDSQL_INSTANCE, REGION)
+- [X] T007 Create .gitignore file (exclude .env, *.db, __pycache__, .pytest_cache, data/*.json)
+- [X] T008 Create README.md with local development setup instructions (installation, configuration, running tests, using MCP Inspector)
 
 **Acceptance Criteria**:
 -  Project structure matches plan.md
@@ -81,15 +81,15 @@
 
 ### Models & Validation
 
-- [ ] T009 [P] Create SpeechMetadata Pydantic model in src/models/speech.py (all fields from data-model.md, validators for chamber, state, electorate)
-- [ ] T010 [P] Create SpeechDetail Pydantic model in src/models/speech.py (extends SpeechMetadata with full_text, word_count)
-- [ ] T011 [P] Create IngestionResult Pydantic model in src/models/results.py (speeches_processed, chunks_created, vectors_stored, duplicates_skipped, errors, processing_time_seconds)
-- [ ] T012 [P] Create SearchResult Pydantic model in src/models/results.py (speech_id, chunk_id, excerpt, speaker, party, chamber, date, title, hansard_reference, topic_tags, relevance_score, chunk_index)
+- [X] T009 [P] Create SpeechMetadata Pydantic model in src/models/speech.py (all fields from data-model.md, validators for chamber, state, electorate)
+- [X] T010 [P] Create SpeechDetail Pydantic model in src/models/speech.py (extends SpeechMetadata with full_text, word_count)
+- [X] T011 [P] Create IngestionResult Pydantic model in src/models/results.py (speeches_processed, chunks_created, vectors_stored, duplicates_skipped, errors, processing_time_seconds)
+- [X] T012 [P] Create SearchResult Pydantic model in src/models/results.py (speech_id, chunk_id, excerpt, speaker, party, chamber, date, title, hansard_reference, topic_tags, relevance_score, chunk_index)
 
 ### Tests for Models
 
-- [ ] T013 Create test_models.py with SpeechMetadata validation tests (valid inputs, chamber validation, electorate validation, state validation, computed fields)
-- [ ] T014 Create test_chunking.py with RecursiveCharacterTextSplitter tests (800 char chunks, 150 overlap, sentence boundaries preserved)
+- [X] T013 Create test_models.py with SpeechMetadata validation tests (valid inputs, chamber validation, electorate validation, state validation, computed fields)
+- [X] T014 Create test_chunking.py with RecursiveCharacterTextSplitter tests (800 char chunks, 150 overlap, sentence boundaries preserved)
 
 **Acceptance Criteria**:
 -  All Pydantic models have >95% test coverage

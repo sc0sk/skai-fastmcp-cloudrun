@@ -1,0 +1,51 @@
+{
+  "name": "Australian Hansard RAG",
+  "version": "0.1.0",
+  "description": "Retrieval-Augmented Generation server for Australian parliamentary speeches using FastMCP, Vertex AI, and Cloud SQL pgvector",
+  "transport": "stdio",
+  "server": {
+    "command": "python",
+    "args": ["src/server.py"],
+    "env": {
+      "PYTHONUNBUFFERED": "1"
+    }
+  },
+  "tools": [
+    {
+      "name": "ingest_markdown_speeches",
+      "description": "Ingest Australian Hansard speeches from Markdown files with YAML frontmatter",
+      "tags": ["admin", "ingestion", "stable"]
+    },
+    {
+      "name": "search_speeches",
+      "description": "Search Australian Hansard speeches using hybrid semantic search with metadata filtering",
+      "tags": ["search", "rag", "stable"],
+      "readOnlyHint": true
+    },
+    {
+      "name": "get_speech",
+      "description": "Retrieve full text of a specific speech by ID",
+      "tags": ["retrieve", "rag", "stable"],
+      "readOnlyHint": true
+    }
+  ],
+  "resources": [
+    {
+      "uri": "hansard://speech/{speech_id}",
+      "description": "Individual speech resource by UUID"
+    },
+    {
+      "uri": "hansard://speeches",
+      "description": "List of all speeches with pagination"
+    },
+    {
+      "uri": "hansard://dataset/stats",
+      "description": "Dataset statistics (speech count, date range, speakers)"
+    }
+  ],
+  "dependencies": {
+    "langchain-google-vertexai": ">=2.0.0",
+    "langchain-google-cloud-sql-pg": ">=0.12.0",
+    "fastmcp": ">=2.14.0"
+  }
+}
