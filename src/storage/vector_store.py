@@ -79,7 +79,8 @@ class VectorStoreService:
             Initialized PostgresVectorStore instance
 
         Note:
-            Creates table with HNSW index if not exists
+            Uses LangChain's default table structure with auto-initialization.
+            Table is created automatically with proper schema if it doesn't exist.
         """
         if self._vector_store is None:
             # Create PostgresEngine for Cloud SQL connection
@@ -92,16 +93,19 @@ class VectorStoreService:
                 password=self.password,
             )
 
-            # Initialize PostgresVectorStore with engine and custom column mappings
+            # Initialize table with proper schema (auto-creates if not exists)
+            # This uses LangChain's standard column names: langchain_id, content, embedding, langchain_metadata
+            await engine.ainit_vectorstore_table(
+                table_name=self.table_name,
+                vector_size=768,  # Match text-embedding-005 output
+            )
+
+            # Create PostgresVectorStore with LangChain defaults
+            # This uses standard column names that match the initialized table
             self._vector_store = await PostgresVectorStore.create(
                 engine=engine,
                 table_name=self.table_name,
                 embedding_service=self.embeddings,
-                # Map our schema to LangChain's expected columns
-                id_column="chunk_id",
-                content_column="chunk_text",
-                embedding_column="embedding",
-                metadata_columns=["speech_id", "chunk_index", "chunk_size", "speaker", "party", "chamber", "state", "date", "hansard_reference"],
             )
 
         return self._vector_store
@@ -196,10 +200,11 @@ class VectorStoreService:
         )
 
         # Format results
+        # With LangChain defaults, metadata is stored in doc.metadata
         results = []
         for doc, score in docs_with_scores:
             results.append({
-                "chunk_id": doc.metadata.get("chunk_id"),
+                "chunk_id": doc.id if hasattr(doc, 'id') else None,
                 "chunk_text": doc.page_content,
                 "score": float(score),
                 "metadata": doc.metadata,
