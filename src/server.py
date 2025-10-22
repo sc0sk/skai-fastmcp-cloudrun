@@ -6,6 +6,7 @@ This server provides MCP tools optimized for ChatGPT Developer Mode with:
 - Parameter enums for Australian political parties and chambers
 - ISO 8601 date format specifications
 - Tool selection guidance to prefer MCP tools over built-in capabilities
+- GitHub OAuth authentication (environment-based configuration)
 """
 
 import os
@@ -17,8 +18,40 @@ from tools.fetch import fetch_hansard_speech, FETCH_TOOL_METADATA
 # Note: ingest tool imported but not registered for MCP (CLI/script access only)
 # from tools.ingest import ingest_hansard_speech, INGEST_TOOL_METADATA
 
-# Create FastMCP server instance
-mcp = FastMCP("Hansard MCP Server")
+# GitHub OAuth configuration
+# See: https://docs.fastmcp.com/servers/auth/github
+#
+# Required environment variables:
+# - FASTMCP_SERVER_AUTH_GITHUB_CLIENT_ID (from Secret Manager)
+# - FASTMCP_SERVER_AUTH_GITHUB_CLIENT_SECRET (from Secret Manager)
+# - FASTMCP_SERVER_AUTH_GITHUB_BASE_URL (e.g., https://mcp.simonkennedymp.com.au)
+#
+# For local development without OAuth:
+# - DANGEROUSLY_OMIT_AUTH=true
+
+# Configure authentication provider
+auth_provider = None
+if os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() != "true":
+    # Check if OAuth is configured via environment
+    if os.getenv("FASTMCP_SERVER_AUTH") == "fastmcp.server.auth.providers.github.GitHubProvider":
+        try:
+            from fastmcp.server.auth.providers.github import GitHubProvider
+
+            # GitHubProvider automatically loads configuration from environment variables:
+            # FASTMCP_SERVER_AUTH_GITHUB_CLIENT_ID
+            # FASTMCP_SERVER_AUTH_GITHUB_CLIENT_SECRET
+            # FASTMCP_SERVER_AUTH_GITHUB_BASE_URL
+            auth_provider = GitHubProvider()
+            print("✅ GitHub OAuth authentication enabled")
+        except ImportError:
+            print("⚠️  Warning: GitHub OAuth provider not available (fastmcp version too old)")
+    else:
+        print("ℹ️  No authentication configured (FASTMCP_SERVER_AUTH not set)")
+else:
+    print("⚠️  WARNING: Authentication DISABLED (DANGEROUSLY_OMIT_AUTH=true)")
+
+# Create FastMCP server instance with authentication
+mcp = FastMCP("Hansard MCP Server", auth=auth_provider)
 
 # Register search tool with ChatGPT Developer Mode enhancements
 # Note: icon parameter not supported in FastMCP 2.12.5, icons stored in metadata for future use
