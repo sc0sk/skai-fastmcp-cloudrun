@@ -45,8 +45,40 @@ class MetadataStore:
         self.region = region or os.getenv("GCP_REGION", "us-central1")
         self.instance = instance or os.getenv("CLOUDSQL_INSTANCE")
         self.database = database or os.getenv("CLOUDSQL_DATABASE", "hansard")
-        self.user = user or os.getenv("CLOUDSQL_USER", "postgres")
-        self.password = password or os.getenv("DATABASE_PASSWORD")
+        # For IAM authentication with Cloud SQL Python Connector:
+        # We explicitly ignore CLOUDSQL_USER and DATABASE_PASSWORD env vars
+        # IAM auth requires: user=<service-account-email>, password=None, enable_iam_auth=True
+        if user is None and password is None:
+            # IAM authentication mode - use default compute service account
+            # Cloud Run uses: PROJECT_NUMBER-compute@developer.gserviceaccount.com
+            # Get project number from environment or metadata
+            project_number = os.getenv("GCP_PROJECT_NUMBER")
+
+            if not project_number:
+                # Try to get from metadata server (works in Cloud Run/GCE)
+                try:
+                    import urllib.request
+                    req = urllib.request.Request(
+                        'http://metadata.google.internal/computeMetadata/v1/project/numeric-project-id',
+                        headers={'Metadata-Flavor': 'Google'}
+                    )
+                    with urllib.request.urlopen(req, timeout=2) as response:
+                        project_number = response.read().decode('utf-8').strip()
+                except:
+                    # If metadata server fails, we can't proceed with IAM auth
+                    pass
+
+            if project_number:
+                self.user = f"{project_number}-compute@developer.gserviceaccount.com"
+                self.password = None
+            else:
+                raise ValueError(
+                    "Cannot determine service account for IAM authentication. "
+                    "Set GCP_PROJECT_NUMBER environment variable or ensure running in Cloud Run."
+                )
+        else:
+            self.user = user
+            self.password = password
 
         # Connection pool (lazy init)
         self._pool: Optional[asyncpg.Pool] = None

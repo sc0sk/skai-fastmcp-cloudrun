@@ -6,7 +6,6 @@ from datetime import date as date_type
 from fastmcp import Context
 
 from src.storage.vector_store import get_default_vector_store
-from src.storage.metadata_store import get_default_metadata_store
 
 
 async def search_speeches(
@@ -104,35 +103,36 @@ async def search_speeches(
         await ctx.report_progress(progress=80, total=100)
         await ctx.info(f"Found {len(results)} matching chunks")
 
-    # Enrich with full speech metadata from metadata store
-    metadata_store = await get_default_metadata_store()
+    # Format results with metadata from vector store
+    # All metadata is already in the search results from LangChain's vector store
     enriched_results = []
 
     for result in results:
-        speech_id = result["metadata"]["speech_id"]
-
-        # Get full speech metadata
-        speech = await metadata_store.get_speech(speech_id)
+        # Get metadata from result
+        metadata = result.get("metadata", {})
+        speech_id = metadata.get("speech_id", "")
 
         # Convert date to ISO string for JSON serialization
-        date_value = result["metadata"]["date"]
-        date_str = date_value.isoformat() if hasattr(date_value, 'isoformat') else str(date_value)
+        date_value = metadata.get("date")
+        if isinstance(date_value, str):
+            date_str = date_value
+        elif hasattr(date_value, 'isoformat'):
+            date_str = date_value.isoformat()
+        else:
+            date_str = str(date_value) if date_value else ""
 
         enriched_results.append({
-            "chunk_id": str(result["chunk_id"]) if result["chunk_id"] else None,
-            "speech_id": str(speech_id),  # Convert UUID to string
-            "excerpt": result["chunk_text"][:500],  # Limit excerpt to 500 chars
-            "relevance_score": result["score"],
-            "chunk_index": result["metadata"]["chunk_index"],
-            # Speech metadata
-            "speaker": result["metadata"]["speaker"],
-            "party": result["metadata"]["party"],
-            "chamber": result["metadata"]["chamber"],
-            "state": result["metadata"].get("state"),
-            "date": date_str,  # Convert date to ISO string
-            "hansard_reference": result["metadata"]["hansard_reference"],
-            "title": speech.title if speech else "Unknown",
-            "word_count": speech.word_count if speech else 0,
+            "speech_id": str(speech_id) if speech_id else "",
+            "excerpt": result.get("content", result.get("chunk_text", ""))[:500],  # Limit excerpt to 500 chars
+            "relevance_score": result.get("score", 0.0),
+            # Speech metadata from vector store
+            "speaker": metadata.get("speaker", ""),
+            "party": metadata.get("party", ""),
+            "chamber": metadata.get("chamber", ""),
+            "electorate": metadata.get("electorate", ""),
+            "date": date_str,
+            "debate": metadata.get("debate", ""),
+            "summary": metadata.get("summary", "")[:200],  # Truncate summary
         })
 
     # Stage 3: Complete (100%)

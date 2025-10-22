@@ -181,6 +181,8 @@ mcp = FastMCP(
 
 # Tool: Search speeches
 @mcp.tool(
+    name="search",
+    description="Search Australian Hansard speeches using semantic search with metadata filters. Performs vector similarity search over parliamentary speech transcripts, returning IDs of relevant speeches for Deep Research mode.",
     annotations={
         "title": "Search Hansard Speeches",
         "readOnlyHint": True,
@@ -243,8 +245,13 @@ async def search(
         ctx=ctx,
     )
 
+    # Deep Research mode compatibility: return {"ids": [...]} format
+    # This allows ChatGPT Deep Research to use search + fetch pattern
+    speech_ids = [result.get("speech_id") for result in results if result.get("speech_id")]
+
     return {
-        "results": results,
+        "ids": speech_ids,  # Required for Deep Research mode
+        "results": results,  # Full results for Developer Mode
         "count": len(results),
         "query": query,
         "filters": {
@@ -259,6 +266,8 @@ async def search(
 
 # Tool: Fetch speech
 @mcp.tool(
+    name="fetch",
+    description="Fetch complete Hansard speech by ID. Retrieves the full text and metadata for a specific parliamentary speech. Use this after finding IDs from search results to get the complete transcript with speaker information, date, chamber, and full content.",
     annotations={
         "title": "Fetch Complete Hansard Speech",
         "readOnlyHint": True,
@@ -267,34 +276,33 @@ async def search(
     },
     exclude_args=["ctx"],  # Context is injected, not exposed to clients
 )
-async def fetch(speech_id: str, ctx: Context | None = None) -> Dict[str, Any]:
+async def fetch(id: str, ctx: Context | None = None) -> Dict[str, Any]:
     """
     Fetch complete Hansard speech by ID.
 
     Retrieves the full text and metadata for a specific parliamentary speech.
-    Use this after finding speech_id from search results to get the complete transcript.
+    Use this after finding IDs from search results to get the complete transcript.
 
     Args:
-        speech_id: UUID of the speech (obtained from search results)
+        id: Speech ID (obtained from search results)
 
     Returns:
         Complete speech with full text, speaker metadata, and parliamentary context
 
     Example:
-        >>> fetch(speech_id="550e8400-e29b-41d4-a716-446655440000")
+        >>> fetch(id="AUH_2024-07-01-p2.s1.per0.reps.u9")
         {
-            "speech_id": "550e8400-e29b-41d4-a716-446655440000",
-            "title": "Second Reading: Climate Change Bill 2024",
-            "full_text": "Mr Speaker, I rise to speak...",
-            "speaker": "Simon Kennedy",
-            "party": "Liberal",
-            "chamber": "House of Representatives",
-            "date": "2024-06-03",
-            "word_count": 1523,
+            "id": "AUH_2024-07-01-p2.s1.per0.reps.u9",
+            "speaker": "Kennedy, Simon MP",
+            "content": "Mr Speaker, I rise to speak...",
+            "date": "2024-07-01",
+            "chamber": "House of Reps",
+            "party": "LP",
+            "debate": "PRIVATE MEMBERS' BUSINESS",
             ...
         }
     """
-    return await fetch_speech(speech_id, ctx=ctx)
+    return await fetch_speech(id, ctx=ctx)
 
 
 # Resource: Dataset statistics
@@ -403,6 +411,8 @@ class GitHubWhitelistMiddleware(BaseHTTPMiddleware):
             "/authorize",  # OAuth authorization endpoint
             "/token",      # OAuth token endpoint
             "/auth/callback",  # OAuth callback handler
+            "/register",   # OAuth client registration (dynamic registration)
+            "/mcp",        # MCP protocol endpoint (OAuth validates at tool call level)
         ]
 
         # Check if path matches any public path (including subpaths)

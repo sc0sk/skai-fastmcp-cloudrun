@@ -24,6 +24,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Copy application code
 COPY src ./src
 COPY scripts ./scripts
+COPY data ./data
+COPY populate_hansard_speeches.py populate_job.py ./
 
 # Install project
 RUN --mount=type=cache,target=/root/.cache/uv \

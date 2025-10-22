@@ -24,7 +24,7 @@ class VectorStoreService:
         user: str = None,
         password: str = None,
         embedding_service: Any = None,
-        table_name: str = "speech_chunks",
+        table_name: str = "langchain_vector_store",
     ):
         """
         Initialize PostgreSQL vector store with Cloud SQL connection.
@@ -47,8 +47,11 @@ class VectorStoreService:
         self.region = region or os.getenv("GCP_REGION", "us-central1")
         self.instance = instance or os.getenv("CLOUDSQL_INSTANCE")
         self.database = database or os.getenv("CLOUDSQL_DATABASE", "hansard")
-        self.user = user or os.getenv("CLOUDSQL_USER", "postgres")
-        self.password = password or os.getenv("DATABASE_PASSWORD")
+        # For IAM authentication: do NOT set user/password
+        # We explicitly ignore CLOUDSQL_USER and DATABASE_PASSWORD env vars
+        # Cloud Run service account will authenticate via IAM
+        self.user = None
+        self.password = None
         self.table_name = table_name
 
         # Create embedding service if not provided
@@ -83,25 +86,25 @@ class VectorStoreService:
         """
         if self._vector_store is None:
             # Create PostgresEngine for Cloud SQL connection
+            # Per official LangChain docs: https://python.langchain.com/docs/integrations/vectorstores/google_cloud_sql_pg/
+            # Use IAM Database Authentication (recommended) - no user/password needed
+            # Cloud Run service account will authenticate automatically
+            print(f"🔒 Using Cloud SQL IAM authentication (service account)")
+
             engine = await PostgresEngine.afrom_instance(
                 project_id=self.project_id,
                 region=self.region,
                 instance=self.instance,
                 database=self.database,
-                user=self.user,
-                password=self.password,
+                # No user/password = IAM authentication (recommended)
             )
 
-            # Initialize PostgresVectorStore with engine and custom column mappings
+            # Initialize PostgresVectorStore with engine
+            # Use LangChain's default schema (langchain_id, content, embedding, langchain_metadata)
             self._vector_store = await PostgresVectorStore.create(
                 engine=engine,
                 table_name=self.table_name,
                 embedding_service=self.embeddings,
-                # Map our schema to LangChain's expected columns
-                id_column="chunk_id",
-                content_column="chunk_text",
-                embedding_column="embedding",
-                metadata_columns=["speech_id", "chunk_index", "chunk_size", "speaker", "party", "chamber", "state", "date", "hansard_reference"],
             )
 
         return self._vector_store
