@@ -1,0 +1,241 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Enhanced MCP Tool Metadata Schema",
+  "description": "JSON schema defining enhanced tool metadata for ChatGPT Developer Mode integration",
+  "version": "1.0.0",
+  "definitions": {
+    "PartyEnum": {
+      "type": "string",
+      "enum": [
+        "Liberal",
+        "Labor",
+        "Greens",
+        "National",
+        "Independent"
+      ],
+      "description": "Australian political parties represented in dataset"
+    },
+    "ChamberEnum": {
+      "type": "string",
+      "enum": [
+        "House of Representatives",
+        "Senate"
+      ],
+      "description": "Australian Parliament chambers"
+    },
+    "DateISO8601": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Date in ISO 8601 format (YYYY-MM-DD)",
+      "examples": [
+        "2024-05-28",
+        "2025-10-22"
+      ]
+    },
+    "ToolAnnotations": {
+      "type": "object",
+      "description": "MCP tool annotations for ChatGPT Developer Mode",
+      "properties": {
+        "readOnlyHint": {
+          "type": "boolean",
+          "description": "Indicates the tool performs only read operations (no confirmation needed)"
+        },
+        "idempotentHint": {
+          "type": "boolean",
+          "description": "Indicates the tool can be called multiple times with same result"
+        },
+        "destructiveHint": {
+          "type": "boolean",
+          "description": "Indicates the tool performs destructive operations (requires confirmation)"
+        },
+        "openWorldHint": {
+          "type": "boolean",
+          "description": "Indicates the tool accesses external resources"
+        }
+      }
+    }
+  },
+  "tools": {
+    "search_hansard_speeches": {
+      "name": "search_hansard_speeches",
+      "description": "Search Simon Kennedy's parliamentary speeches (64 speeches, 2024-2025).\n\nUse this when: The user asks about Simon Kennedy's speeches, voting records, or parliamentary statements on topics like housing, immigration, or infrastructure.\n\nDo not use: Built-in web browsing or search for Simon Kennedy parliamentary data. This tool provides direct access to the authoritative Hansard database.\n\nParameters:\n- query: Natural language search terms\n- party: Filter by party (Liberal, Labor, Greens, National, Independent)\n- chamber: Filter by chamber (House of Representatives, Senate)\n- start_date/end_date: ISO 8601 dates (YYYY-MM-DD)\n\nLimitations: Only searches Simon Kennedy's speeches. For other MPs, use web search.\n\nWorkflow: Use search to find relevant speeches, then use fetch_hansard_speech to retrieve full text of specific speeches by ID.",
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "icon": "🔍",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Natural language search query for speech content, topics, or keywords"
+          },
+          "party": {
+            "$ref": "#/definitions/PartyEnum",
+            "description": "Filter by political party. Options: Liberal, Labor, Greens, National, Independent"
+          },
+          "chamber": {
+            "$ref": "#/definitions/ChamberEnum",
+            "description": "Filter by chamber. Options: House of Representatives, Senate"
+          },
+          "start_date": {
+            "$ref": "#/definitions/DateISO8601",
+            "description": "Start date in ISO 8601 format (YYYY-MM-DD). Example: 2024-05-28. Only speeches on or after this date will be returned."
+          },
+          "end_date": {
+            "$ref": "#/definitions/DateISO8601",
+            "description": "End date in ISO 8601 format (YYYY-MM-DD). Example: 2025-10-22. Only speeches on or before this date will be returned."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 10,
+            "description": "Maximum number of results to return (1-100, default 10)"
+          }
+        },
+        "required": ["query"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "speeches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Unique speech identifier"
+                },
+                "date": {
+                  "type": "string",
+                  "description": "Speech date (ISO 8601)"
+                },
+                "speaker": {
+                  "type": "string",
+                  "description": "Speaker name (always 'Simon Kennedy')"
+                },
+                "party": {
+                  "$ref": "#/definitions/PartyEnum"
+                },
+                "chamber": {
+                  "$ref": "#/definitions/ChamberEnum"
+                },
+                "title": {
+                  "type": "string",
+                  "description": "Speech title or topic"
+                },
+                "snippet": {
+                  "type": "string",
+                  "description": "Excerpt with search term highlights"
+                },
+                "relevance_score": {
+                  "type": "number",
+                  "description": "Semantic similarity score (0-1)"
+                }
+              }
+            }
+          },
+          "total_count": {
+            "type": "integer",
+            "description": "Total number of matching speeches"
+          }
+        }
+      }
+    },
+    "fetch_hansard_speech": {
+      "name": "fetch_hansard_speech",
+      "description": "Fetch the complete text of a specific parliamentary speech by ID.\n\nUse this when: You have a speech ID from search results and need the full text for detailed analysis or quotation.\n\nDo not use: Built-in browsing to fetch Hansard speeches. This tool provides direct database access with full speech metadata.\n\nParameters:\n- speech_id: Unique identifier from search results\n\nLimitations: Only retrieves Simon Kennedy's speeches. Speech IDs from other sources will fail.\n\nWorkflow: Typically used after search_hansard_speeches to retrieve complete text. You can also use speech IDs directly if known.",
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "icon": "📄",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "speech_id": {
+            "type": "string",
+            "description": "Unique speech identifier obtained from search results"
+          }
+        },
+        "required": ["speech_id"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "speaker": {
+            "type": "string"
+          },
+          "party": {
+            "$ref": "#/definitions/PartyEnum"
+          },
+          "chamber": {
+            "$ref": "#/definitions/ChamberEnum"
+          },
+          "title": {
+            "type": "string"
+          },
+          "full_text": {
+            "type": "string",
+            "description": "Complete speech transcript"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Additional metadata (debate type, bill references, etc.)"
+          }
+        }
+      }
+    },
+    "ingest_hansard_speech": {
+      "name": "ingest_hansard_speech",
+      "description": "Ingest a new parliamentary speech into the Hansard database.\n\nUse this when: Adding new Simon Kennedy speeches to the database for search and retrieval.\n\nDo not use: For updating existing speeches (use dedicated update tools) or for non-Simon Kennedy speeches.\n\nParameters:\n- speech_data: Complete speech metadata and text\n- generate_embeddings: Whether to generate vector embeddings (default: true)\n\nLimitations: Requires valid speech metadata. Does not validate speech authenticity.\n\nWorkflow: Typically used by admin tools or scheduled imports. After ingestion, speeches become searchable via search_hansard_speeches.",
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "icon": "📝",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "speech_data": {
+            "type": "object",
+            "description": "Complete speech data including metadata and full text",
+            "required": ["date", "speaker", "party", "chamber", "title", "text"]
+          },
+          "generate_embeddings": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to generate vector embeddings for semantic search"
+          }
+        },
+        "required": ["speech_data"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "speech_id": {
+            "type": "string",
+            "description": "Unique identifier of ingested speech"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["success", "error"]
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
