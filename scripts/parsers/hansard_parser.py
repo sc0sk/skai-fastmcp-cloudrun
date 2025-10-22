@@ -35,7 +35,7 @@ class HansardMarkdownParser:
             'speaker': self.parse_speaker_name(),
             'speaker_id': self.frontmatter.get('speaker_id'),
             'date': self.parse_date(),
-            'chamber': self.frontmatter.get('chamber'),
+            'chamber': self.normalize_chamber(),
             'electorate': self.frontmatter.get('electorate'),
             'party': self.frontmatter.get('party'),
             'debate': self.frontmatter.get('debate'),
@@ -65,6 +65,19 @@ class HansardMarkdownParser:
         # Parse from string
         from datetime import datetime
         return datetime.strptime(date_str, '%Y-%m-%d').date()
+
+    def normalize_chamber(self) -> str:
+        """Normalize chamber name to match SpeechMetadata validation."""
+        chamber_raw = self.frontmatter.get('chamber', '')
+
+        # Map common variations to canonical names
+        chamber_map = {
+            'House of Reps': 'House of Representatives',
+            'House of Representatives': 'House of Representatives',
+            'Senate': 'Senate',
+        }
+
+        return chamber_map.get(chamber_raw, chamber_raw)
 
     def extract_speech_text(self) -> str:
         """Get speech text content."""
