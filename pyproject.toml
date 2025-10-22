@@ -5,6 +5,7 @@ description = "FastMCP server for Australian Hansard RAG with ChatGPT Developer 
 requires-python = ">=3.11"
 dependencies = [
     "fastmcp>=2.12.5",
+    "langchain",
     "langchain-google-vertexai",
     "langchain-google-cloud-sql-pg",
     "langgraph",
