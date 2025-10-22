@@ -61,21 +61,16 @@ async def populate_database():
     print(f"✅ Engine created")
 
     # Initialize vector store table (auto-creates pgvector extension!)
-    print(f"\n🔧 Initializing vector store table (if not exists)...")
+    print(f"\n🔧 Creating vector store table...")
     print(f"   Table: {table_name}")
     print(f"   Vector size: 768 (text-embedding-005)")
+    print(f"   Schema: langchain_id (UUID), content (TEXT), embedding (vector), langchain_metadata (JSON)")
 
-    try:
-        await engine.ainit_vectorstore_table(
-            table_name=table_name,
-            vector_size=768
-        )
-        print(f"✅ Table initialized (pgvector extension auto-enabled!)")
-    except Exception as e:
-        if "already exists" in str(e).lower():
-            print(f"✅ Table already exists, skipping initialization")
-        else:
-            raise
+    await engine.ainit_vectorstore_table(
+        table_name=table_name,
+        vector_size=768
+    )
+    print(f"✅ Table created with correct schema (pgvector extension auto-enabled!)")
 
     # Create embeddings service
     print(f"\n🤖 Creating Vertex AI embeddings service...")

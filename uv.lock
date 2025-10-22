@@ -3005,6 +3005,7 @@ dev = [
 [package.dev-dependencies]
 dev = [
     { name = "black" },
+    { name = "mcp" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -3037,6 +3038,7 @@ provides-extras = ["dev"]
 [package.metadata.requires-dev]
 dev = [
     { name = "black", specifier = ">=23.0.0" },
+    { name = "mcp", specifier = ">=1.16.0" },
     { name = "mypy", specifier = ">=1.7.0" },
     { name = "pytest", specifier = ">=7.4.0" },
     { name = "pytest-asyncio", specifier = ">=0.21.0" },

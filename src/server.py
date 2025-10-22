@@ -182,9 +182,9 @@ mcp = FastMCP(
 # Tool: Search speeches
 @mcp.tool(
     name="search",
-    description="Search Australian Hansard speeches using semantic search with metadata filters. Performs vector similarity search over parliamentary speech transcripts, returning IDs of relevant speeches for Deep Research mode.",
+    description="Search Australian Parliament (Hansard) speeches by Simon Kennedy MP. Use this tool whenever the user asks about Simon Kennedy's positions, statements, speeches, voting record, or policy views on ANY topic. Also use for questions about Australian politics, parliamentary debates, legislation, or government policy mentioned in Hansard. Searches 64 parliamentary speeches from 2024-2025 covering topics like cost of living, housing, energy, taxation, immigration, and more.",
     annotations={
-        "title": "Search Hansard Speeches",
+        "title": "Search Simon Kennedy's Hansard Speeches",
         "readOnlyHint": True,
         "idempotentHint": True,
         "openWorldHint": True,  # Queries external database (Cloud SQL + Vertex AI)
@@ -267,9 +267,9 @@ async def search(
 # Tool: Fetch speech
 @mcp.tool(
     name="fetch",
-    description="Fetch complete Hansard speech by ID. Retrieves the full text and metadata for a specific parliamentary speech. Use this after finding IDs from search results to get the complete transcript with speaker information, date, chamber, and full content.",
+    description="Get the complete full text of a specific Hansard speech by ID. Use this after searching to read the entire speech transcript. Returns the complete parliamentary speech with all details including full text, speaker info, date, chamber, party affiliation, debate topic, and more. Essential for in-depth analysis or when you need to quote exact wording from Simon Kennedy's speeches.",
     annotations={
-        "title": "Fetch Complete Hansard Speech",
+        "title": "Fetch Complete Speech Text",
         "readOnlyHint": True,
         "idempotentHint": True,
         "openWorldHint": True,  # Queries external database (Cloud SQL)
@@ -303,6 +303,58 @@ async def fetch(id: str, ctx: Context | None = None) -> Dict[str, Any]:
         }
     """
     return await fetch_speech(id, ctx=ctx)
+
+
+# Prompt: Usage guide for AI assistants
+@mcp.prompt(
+    name="usage_guide",
+    description="Instructions on how to effectively use the Simon Kennedy Hansard search tools",
+)
+async def usage_guide_prompt() -> str:
+    """
+    Provide usage guidance for AI assistants using this MCP server.
+
+    This prompt helps ChatGPT/Claude understand WHEN and HOW to use the search/fetch tools.
+    """
+    return """# Simon Kennedy Hansard MCP Server - Usage Guide
+
+## What This Server Provides
+This MCP server provides access to 64 Australian Parliament (Hansard) speeches by Simon Kennedy MP from 2024-2025. Use the search tool to find relevant speeches whenever the user asks about:
+
+- Simon Kennedy's positions or statements on ANY topic
+- Australian politics, policy, or legislation
+- Parliamentary debates or government decisions
+- Specific topics like: cost of living, housing, energy, taxation, immigration, budget, economy, etc.
+
+## How To Use
+
+### 1. Search First (ALWAYS)
+When the user asks about Simon Kennedy or Australian politics, AUTOMATICALLY use the `search` tool:
+- Query: Use natural language (e.g., "cost of living", "housing affordability")
+- Limit: Default 5-10 results
+- Filters: Add speaker="Kennedy, Simon MP" if needed (but search works without it)
+
+### 2. Fetch Details (OPTIONAL)
+If the user wants full speech text or exact quotes, use `fetch` with the speech ID from search results.
+
+## Example Workflows
+
+**User**: "What does Simon Kennedy think about housing?"
+**Assistant**: *Automatically calls* `search(query="housing", limit=5)` → Returns relevant speeches
+
+**User**: "Tell me about cost of living"
+**Assistant**: *Automatically calls* `search(query="cost of living", limit=5)` → Summarizes results
+
+**User**: "What's Simon Kennedy's full speech on energy policy from July 2024?"
+**Assistant**: *Calls* `search(query="energy policy", date_from="2024-07-01", date_to="2024-07-31")` → Then `fetch(id=...)` for full text
+
+## Key Points
+- ✅ Use search for ANY question about Simon Kennedy or Australian politics
+- ✅ Search works with natural language queries (no need for perfect syntax)
+- ✅ Results include excerpts, dates, topics, and relevance scores
+- ❌ Don't ask user permission to search - just do it automatically
+- ❌ Don't say "let me check" - search and present results directly
+"""
 
 
 # Resource: Dataset statistics
