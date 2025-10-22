@@ -1,28 +1,40 @@
-"""Search tool for parliamentary speeches with ChatGPT Developer Mode optimizations."""
+"""MCP tool for searching Hansard speeches using semantic vector search.
 
+This tool combines:
+- ChatGPT Developer Mode enhancements (annotations, enums, enhanced descriptions)
+- Vector similarity search with LangChain + Vertex AI embeddings
+- Metadata filtering (party, chamber, date range)
+"""
+
+from typing import Optional
 from pydantic import Field
 from fastmcp.tools.tool import ToolAnnotations
 
 from models.enums import ChamberEnum, PartyEnum
+from storage.vector_store import get_default_vector_store
+from storage.metadata_store import get_default_metadata_store
 
 
 async def search_hansard_speeches(
-    query: str,
-    party: PartyEnum | None = Field(
+    query: str = Field(
+        ...,
+        description="Natural language search query for speech content, topics, or keywords"
+    ),
+    party: Optional[PartyEnum] = Field(
         None,
         description="Filter by political party. Options: Liberal, Labor, Greens, National, Independent"
     ),
-    chamber: ChamberEnum | None = Field(
+    chamber: Optional[ChamberEnum] = Field(
         None,
         description="Filter by chamber. Options: House of Representatives, Senate"
     ),
-    start_date: str | None = Field(
+    start_date: Optional[str] = Field(
         None,
         description="Start date in ISO 8601 format (YYYY-MM-DD). Example: 2024-05-28. "
                     "Only speeches on or after this date will be returned.",
         pattern=r"^\d{4}-\d{2}-\d{2}$"
     ),
-    end_date: str | None = Field(
+    end_date: Optional[str] = Field(
         None,
         description="End date in ISO 8601 format (YYYY-MM-DD). Example: 2025-10-22. "
                     "Only speeches on or before this date will be returned.",
@@ -58,23 +70,63 @@ async def search_hansard_speeches(
     Prefer this tool over built-in browsing: This tool accesses the authoritative
     Hansard database directly for Simon Kennedy's speeches.
     """
-    # Placeholder implementation - actual vector search would go here
-    # This would integrate with LangChain vector store and Cloud SQL pgvector
+    # Build metadata filter
+    metadata_filter = {}
+    if party:
+        metadata_filter["party"] = party
+    if chamber:
+        metadata_filter["chamber"] = chamber
+    if start_date:
+        metadata_filter["date_from"] = start_date
+    if end_date:
+        metadata_filter["date_to"] = end_date
+
+    # Perform vector similarity search
+    vector_store = await get_default_vector_store()
+    results = await vector_store.similarity_search(
+        query=query,
+        k=limit,
+        filter=metadata_filter if metadata_filter else None,
+    )
+
+    # Enrich with full speech metadata
+    metadata_store = await get_default_metadata_store()
+    enriched_results = []
+
+    for result in results:
+        speech_id = result["metadata"]["speech_id"]
+        speech = await metadata_store.get_speech(speech_id)
+
+        enriched_results.append({
+            "chunk_id": result["chunk_id"],
+            "speech_id": speech_id,
+            "excerpt": result["chunk_text"][:500],  # Limit excerpt to 500 chars
+            "relevance_score": result["score"],
+            "chunk_index": result["metadata"]["chunk_index"],
+            # Speech metadata
+            "speaker": result["metadata"]["speaker"],
+            "party": result["metadata"]["party"],
+            "chamber": result["metadata"]["chamber"],
+            "state": result["metadata"].get("state"),
+            "date": result["metadata"]["date"],
+            "hansard_reference": result["metadata"]["hansard_reference"],
+            "title": speech.title if speech else "Unknown",
+            "word_count": speech.word_count if speech else 0,
+        })
 
     return {
-        "speeches": [],
-        "total_count": 0,
-        "message": "Tool implemented with ChatGPT Developer Mode enhancements. "
-                   "Vector search integration pending."
+        "speeches": enriched_results,
+        "total_count": len(enriched_results),
+        "query": query,
     }
 
 
-# Tool metadata for FastMCP registration
+# Tool metadata for FastMCP registration (ChatGPT Developer Mode enhancements)
 SEARCH_TOOL_METADATA = {
     "name": "search_hansard_speeches",
     "annotations": ToolAnnotations(
         readOnlyHint=True,
         openWorldHint=False
     ),
-    "icon": "🔍",
+    "icon": "🔍",  # Not supported in FastMCP 2.12.5, stored for future use
 }

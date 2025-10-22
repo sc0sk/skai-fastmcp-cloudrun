@@ -7,10 +7,59 @@ This server provides MCP tools optimized for ChatGPT Developer Mode with:
 - ISO 8601 date format specifications
 - Tool selection guidance to prefer MCP tools over built-in capabilities
 - GitHub OAuth authentication (environment-based configuration)
+- LangChain + Vertex AI + Cloud SQL PostgreSQL vector search
 """
 
 import os
+from contextlib import asynccontextmanager
 from fastmcp import FastMCP
+
+# Lifespan context manager for global resources (database connections, embedding models)
+@asynccontextmanager
+async def lifespan(app: FastMCP):
+    """
+    Manage global resources (database connections, embedding models).
+
+    Pre-initializes connections on startup to avoid cold-start delays.
+    Ensures proper cleanup on shutdown.
+    """
+    # Startup: Pre-initialize resources
+    print("🚀 FastMCP Hansard RAG Server starting...")
+    print("🔄 Warming up database connections and embedding models...")
+
+    from storage.metadata_store import get_default_metadata_store
+    from storage.vector_store import get_default_vector_store
+
+    # Pre-initialize vector store (triggers DB + embedding model initialization)
+    try:
+        vector_store = await get_default_vector_store()
+        await vector_store._get_vector_store()  # Force initialization
+        print("✅ Vector store initialized")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not initialize vector store: {e}")
+
+    # Pre-initialize metadata store
+    try:
+        metadata_store = await get_default_metadata_store()
+        await metadata_store._get_pool()  # Force connection pool initialization
+        print("✅ Metadata store initialized")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not initialize metadata store: {e}")
+
+    print("✅ Server ready!")
+
+    yield
+
+    # Shutdown: Clean up resources
+    print("🛑 FastMCP Hansard RAG Server shutting down...")
+    from storage.metadata_store import _default_metadata_store
+    from storage.vector_store import _default_vector_store
+
+    if _default_metadata_store:
+        await _default_metadata_store.close()
+
+    if _default_vector_store:
+        await _default_vector_store.close()
 
 # Import tool functions (relative imports for FastMCP)
 from tools.search import search_hansard_speeches, SEARCH_TOOL_METADATA
@@ -50,8 +99,8 @@ if os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() != "true":
 else:
     print("⚠️  WARNING: Authentication DISABLED (DANGEROUSLY_OMIT_AUTH=true)")
 
-# Create FastMCP server instance with authentication
-mcp = FastMCP("Hansard MCP Server", auth=auth_provider)
+# Create FastMCP server instance with authentication and lifespan
+mcp = FastMCP("Hansard MCP Server", auth=auth_provider, lifespan=lifespan)
 
 # Register search tool with ChatGPT Developer Mode enhancements
 # Note: icon parameter not supported in FastMCP 2.12.5, icons stored in metadata for future use
