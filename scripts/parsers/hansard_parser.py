@@ -16,7 +16,7 @@ class HansardMarkdownParser:
         self.speech_text: str = ""
 
     def parse(self) -> Dict[str, Any]:
-        """Parse the markdown file and return structured data."""
+        """Parse the markdown file and return ALL metadata + speech text."""
         content = self.file_path.read_text(encoding='utf-8')
 
         # Split frontmatter and content
@@ -30,19 +30,19 @@ class HansardMarkdownParser:
         # Extract speech text (after second ---)
         self.speech_text = parts[2].strip()
 
-        # Build structured data
-        return {
+        # Build structured data with ALL frontmatter fields
+        result = {
+            # Basic identification (normalized/parsed)
             'speaker': self.parse_speaker_name(),
-            'speaker_id': self.frontmatter.get('speaker_id'),
             'date': self.parse_date(),
             'chamber': self.normalize_chamber(),
-            'electorate': self.frontmatter.get('electorate'),
-            'party': self.frontmatter.get('party'),
-            'debate': self.frontmatter.get('debate'),
-            'utterance_id': self.frontmatter.get('utterance_id'),
-            'hansard_reference': self.frontmatter.get('source_file'),
             'full_text': self.speech_text,
+
+            # All other frontmatter fields (raw) - dynamically include everything
+            **{k: v for k, v in self.frontmatter.items() if k not in ['speaker', 'date', 'chamber']}
         }
+
+        return result
 
     def parse_speaker_name(self) -> str:
         """Convert 'LastName, FirstName MP' to 'FirstName LastName'."""

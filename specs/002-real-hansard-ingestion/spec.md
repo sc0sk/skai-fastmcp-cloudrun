@@ -73,19 +73,19 @@ For the 64-file ingestion, the administrator needs visibility into progress (fil
 ### Functional Requirements
 
 - **FR-001**: System MUST read all .md files from `data/hansard_reps/` directory
-- **FR-002**: System MUST parse YAML frontmatter to extract metadata: speaker, speaker_id, date, chamber, electorate, party, debate, parliament, session, period, utterance_id, source_file
+- **FR-002**: System MUST parse YAML frontmatter to extract ALL metadata fields including: basic metadata (speaker, date, chamber, party, electorate), analytical metadata (summary, entities, themes, tags, speech_type, rhetoric_intent, policy_areas, political_stance), legislative context (bill_reference, vote_position), content analysis (word_count, interruptions, statistical_claims), and communications utility (quotable_phrases, soundbite_potential, controversy_level)
 - **FR-003**: System MUST extract speech text content after the second `---` marker (end of YAML frontmatter)
 - **FR-004**: System MUST validate required fields (speaker, date, chamber, speech text) exist before ingestion
 - **FR-005**: System MUST parse speaker field format "LastName, FirstName MP" and extract full name
-- **FR-006**: System MUST convert date strings (YYYY-MM-DD format) to database-compatible date objects
+- **FR-006**: System MUST use LangChain's PostgresEngine with custom metadata columns for frequently-filtered fields (speaker, party, chamber, date, speech_type) and JSONB column for complex nested metadata
 - **FR-007**: System MUST chunk speech text into ~800 character segments with 150 character overlap
 - **FR-008**: System MUST generate 768-dimensional vector embeddings using Vertex AI for each chunk
-- **FR-009**: System MUST store speech metadata in speeches table with generated UUID
-- **FR-010**: System MUST store chunks with embeddings in speech_chunks table linked to parent speech
-- **FR-011**: System MUST convert date objects to ISO strings before JSON serialization for LangChain metadata
-- **FR-012**: System MUST detect duplicate speeches based on content hash and skip re-ingestion
-- **FR-013**: System MUST log errors for files that fail parsing without halting entire batch
-- **FR-014**: System MUST provide progress reporting (files processed, speeches ingested, chunks created)
+- **FR-009**: System MUST store chunks with embeddings and ALL metadata (flattened where appropriate) to enable political/communications analysis queries
+- **FR-010**: System MUST serialize complex metadata fields (entities, themes, policy_areas, political_stance, key_mentions, communications_utility) as JSON for storage in langchain_metadata column
+- **FR-011**: System MUST detect duplicate speeches based on content hash and skip re-ingestion
+- **FR-012**: System MUST log errors for files that fail parsing without halting entire batch
+- **FR-013**: System MUST provide progress reporting (files processed, speeches ingested, chunks created)
+- **FR-014**: System MUST enable filtering by political stance, policy areas, speech type, themes, and communications utility metrics
 
 ### Key Entities
 
