@@ -103,7 +103,8 @@ async def validate_github_user(request):
 
     # Check GitHub username against whitelist
     github_username = user_info.get("login", "")
-    if github_username not in ALLOWED_GITHUB_USERNAMES:
+    # Allow all users if whitelist contains "*"
+    if "*" not in ALLOWED_GITHUB_USERNAMES and github_username not in ALLOWED_GITHUB_USERNAMES:
         print(f"⚠️  Authorization denied for GitHub user: {github_username}")
         return JSONResponse(
             {

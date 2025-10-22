@@ -32,32 +32,52 @@ async def fetch_speech(speech_id: str, ctx: Optional[Context] = None) -> Dict[st
 
     vector_store = await get_default_vector_store()
 
-    # Search for the speech by ID in metadata
-    # Since we don't have a direct get-by-id, we do a metadata filter search
+    # LangChain PostgresVectorStore doesn't support JSONB metadata filtering
+    # So we get multiple results and filter client-side
+    # Get more results to ensure we find all chunks of the target speech
     results = await vector_store.similarity_search(
-        query="",  # Empty query - we're filtering by ID only
-        k=1,
-        filter={"speech_id": speech_id}
+        query="parliament speech",  # Generic query to match all speeches
+        k=50,  # Get enough results to likely contain all chunks
+        filter=None  # No metadata filter - will filter client-side
     )
 
-    if not results or len(results) == 0:
+    if not results:
+        if ctx:
+            await ctx.warning(f"No speeches found in database")
+        raise ValueError(f"Speech not found: {speech_id}")
+
+    # Filter results for matching speech_id
+    matching_chunks = []
+    for result in results:
+        metadata = result.get("metadata", {})
+        if metadata.get("speech_id") == speech_id:
+            matching_chunks.append(result)
+
+    if not matching_chunks:
         if ctx:
             await ctx.warning(f"Speech not found: {speech_id}")
         raise ValueError(f"Speech not found: {speech_id}")
 
-    # Extract the first (and should be only) result
-    result = results[0]
-    content = result.get("content", result.get("page_content", ""))
-    metadata = result.get("metadata", {})
+    # Sort chunks by chunk_index to reconstruct original order
+    matching_chunks.sort(key=lambda x: x.get("metadata", {}).get("chunk_index", 0))
+
+    # Combine all chunk texts to reconstruct full speech
+    full_content = " ".join([
+        chunk.get("chunk_text", chunk.get("content", chunk.get("page_content", "")))
+        for chunk in matching_chunks
+    ])
+
+    # Use metadata from first chunk (all chunks have same metadata except chunk_index)
+    metadata = matching_chunks[0].get("metadata", {})
 
     if ctx:
-        word_count = len(content.split())
+        word_count = len(full_content.split())
         await ctx.info(f"Retrieved speech: {metadata.get('speaker', 'Unknown')} ({word_count} words)")
 
     # Return speech data
     return {
         "id": speech_id,
-        "content": content,
+        "content": full_content,
         "speaker": metadata.get("speaker", ""),
         "party": metadata.get("party", ""),
         "chamber": metadata.get("chamber", ""),
@@ -68,7 +88,7 @@ async def fetch_speech(speech_id: str, ctx: Optional[Context] = None) -> Dict[st
         "tags": metadata.get("tags", ""),
         "summary": metadata.get("summary", ""),
         "speaker_id": metadata.get("speaker_id", ""),
-        "word_count": len(content.split()),
+        "word_count": len(full_content.split()),
     }
 
 
