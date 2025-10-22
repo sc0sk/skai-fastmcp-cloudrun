@@ -41,15 +41,32 @@ async def main():
     conn = await metadata_store._get_connection()
 
     try:
-        # Find speeches without chunks
-        speeches_without_chunks = await conn.fetch("""
-            SELECT speech_id, title, full_text, speaker, party,
-                   chamber, state, date, hansard_reference
-            FROM speeches
-            WHERE speech_id NOT IN (
-                SELECT DISTINCT speech_id FROM speech_chunks
+        # Check if speech_chunks table exists
+        table_exists = await conn.fetchval("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables
+                WHERE table_schema = 'public'
+                AND table_name = 'speech_chunks'
             )
         """)
+
+        # Find speeches without chunks
+        if table_exists:
+            speeches_without_chunks = await conn.fetch("""
+                SELECT speech_id, title, full_text, speaker, party,
+                       chamber, state, date, hansard_reference
+                FROM speeches
+                WHERE speech_id NOT IN (
+                    SELECT DISTINCT speech_id FROM speech_chunks
+                )
+            """)
+        else:
+            # If table doesn't exist, all speeches need chunks
+            speeches_without_chunks = await conn.fetch("""
+                SELECT speech_id, title, full_text, speaker, party,
+                       chamber, state, date, hansard_reference
+                FROM speeches
+            """)
 
         total = len(speeches_without_chunks)
         print(f"📊 Found {total} speeches without chunks")
