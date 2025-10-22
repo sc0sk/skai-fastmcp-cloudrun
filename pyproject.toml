@@ -11,6 +11,7 @@ dependencies = [
     "langgraph",
     "pydantic>=2.0",
     "uvicorn>=0.30.0",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
