@@ -102,7 +102,7 @@ async def main():
                         "party": speech['party'],
                         "chamber": speech['chamber'],
                         "state": speech['state'],
-                        "date": speech['date'],
+                        "date": speech['date'].isoformat() if hasattr(speech['date'], 'isoformat') else str(speech['date']),
                         "hansard_reference": speech['hansard_reference'],
                     }
                     chunk_metadatas.append(metadata)
