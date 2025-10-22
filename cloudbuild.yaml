@@ -9,7 +9,7 @@ steps:
       - 'build'
       - '--platform=linux/amd64'
       - '--tag=gcr.io/$PROJECT_ID/hansard-mcp:latest'
-      - '--tag=gcr.io/$PROJECT_ID/hansard-mcp:v002'
+      - '--tag=gcr.io/$PROJECT_ID/hansard-mcp:v003'
       - '--push'
       - '.'
     env:
@@ -25,4 +25,4 @@ options:
 
 images:
   - 'gcr.io/$PROJECT_ID/hansard-mcp:latest'
-  - 'gcr.io/$PROJECT_ID/hansard-mcp:v002'
+  - 'gcr.io/$PROJECT_ID/hansard-mcp:v003'

@@ -13,6 +13,7 @@ Auto-generated from all feature plans. Last updated: 2025-10-21
 - Cloud SQL PostgreSQL with pgvector (production), SQLite (local dev for metadata), dual-table schema (speeches + speech_chunks) (001-hansard-rag-implementation)
 - Python 3.11+ (Cloud Run compatibility) + FastMCP 2.14.0+ (OAuth Proxy, GitHubProvider), Docker (multi-stage builds), Redis client (persistent token storage) (002-github-oauth-docker)
 - Redis (production OAuth token storage), Google Secret Manager (JWT signing keys, token encryption keys), Cloud SQL PostgreSQL + pgvector (existing RAG data) (002-github-oauth-docker)
+- Python 3.11+ (Cloud Run compatibility) + FastMCP 2.12.5+, Starlette (ASGI web framework), FastMCP GitHubProvider (003-oauth2-1-compliance)
 
 ## Project Structure
 ```
@@ -71,6 +72,7 @@ gcloud run deploy hansard-mcp-server --image=gcr.io/PROJECT_ID/hansard-mcp:lates
 - Constitution compliance: Follow .specify/memory/constitution.md v2.6.0
 
 ## Recent Changes
+- 003-oauth2-1-compliance: Added Python 3.11+ (Cloud Run compatibility) + FastMCP 2.12.5+, Starlette (ASGI web framework), FastMCP GitHubProvider
 - 002-github-oauth-docker: Implemented GitHub OAuth authentication and Docker deployment
   - OAuth Proxy pattern: GitHubProvider with PKCE, JWT signing, token encryption
   - Multi-stage Docker build: Python 3.13-slim, non-root user (UID 1000), health checks

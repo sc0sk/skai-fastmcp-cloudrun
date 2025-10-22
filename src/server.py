@@ -451,6 +451,24 @@ app = mcp.http_app()
 from starlette.middleware.base import BaseHTTPMiddleware
 
 
+class OAuthResourceParameterMiddleware(BaseHTTPMiddleware):
+    """Middleware to strip RFC 8707 'resource' parameter from OAuth authorize requests."""
+
+    async def dispatch(self, request, call_next):
+        # Only modify /authorize endpoint requests
+        if request.url.path == "/authorize" and "resource" in request.query_params:
+            # Remove 'resource' parameter from query string (ChatGPT sends this, FastMCP doesn't support it)
+            from starlette.datastructures import URL
+            query_params = dict(request.query_params)
+            query_params.pop("resource", None)
+
+            # Rebuild URL without 'resource' parameter
+            new_url = request.url.replace(query=str(URL("").replace(query_params=query_params).query))
+            request._url = new_url
+
+        return await call_next(request)
+
+
 class GitHubWhitelistMiddleware(BaseHTTPMiddleware):
     """Middleware to enforce GitHub username whitelist for all MCP requests."""
 
@@ -484,6 +502,10 @@ class GitHubWhitelistMiddleware(BaseHTTPMiddleware):
         # User is authorized, proceed with request
         return await call_next(request)
 
+
+# Add OAuth resource parameter middleware (must be first to modify requests before auth)
+app.add_middleware(OAuthResourceParameterMiddleware)
+print("✅ OAuth resource parameter middleware enabled (RFC 8707 compatibility)")
 
 # Only add whitelist middleware if OAuth is enabled
 if os.getenv("FASTMCP_SERVER_AUTH"):
