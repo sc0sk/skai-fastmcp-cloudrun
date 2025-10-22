@@ -83,14 +83,19 @@ class VectorStoreService:
             Table is created automatically with proper schema if it doesn't exist.
         """
         if self._vector_store is None:
+            # Determine auth method - for IAM auth, both user and password must be None
+            # If only one is set, force both to None for IAM auth
+            use_user = self.user if (self.user and self.password) else None
+            use_password = self.password if (self.user and self.password) else None
+
             # Create PostgresEngine for Cloud SQL connection
             engine = await PostgresEngine.afrom_instance(
                 project_id=self.project_id,
                 region=self.region,
                 instance=self.instance,
                 database=self.database,
-                user=self.user,
-                password=self.password,
+                user=use_user,
+                password=use_password,
             )
 
             # Initialize table with proper schema (auto-creates if not exists)
