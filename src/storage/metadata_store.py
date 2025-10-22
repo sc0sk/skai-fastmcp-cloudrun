@@ -45,8 +45,8 @@ class MetadataStore:
         self.region = region or os.getenv("GCP_REGION", "us-central1")
         self.instance = instance or os.getenv("CLOUDSQL_INSTANCE")
         self.database = database or os.getenv("CLOUDSQL_DATABASE", "hansard")
-        self.user = user or os.getenv("CLOUDSQL_USER", "postgres")
-        self.password = password or os.getenv("DATABASE_PASSWORD")
+        self.user = user or os.getenv("CLOUDSQL_USER")  # None for IAM auth
+        self.password = password or os.getenv("DATABASE_PASSWORD")  # None for IAM auth
 
         # Connection pool (lazy init)
         self._pool: Optional[asyncpg.Pool] = None
