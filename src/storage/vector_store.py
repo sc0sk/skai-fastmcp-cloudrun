@@ -100,10 +100,16 @@ class VectorStoreService:
 
             # Initialize table with proper schema (auto-creates if not exists)
             # This uses LangChain's standard column names: langchain_id, content, embedding, langchain_metadata
-            await engine.ainit_vectorstore_table(
-                table_name=self.table_name,
-                vector_size=768,  # Match text-embedding-005 output
-            )
+            # Ignore if table already exists (e.g., from manual schema init)
+            try:
+                await engine.ainit_vectorstore_table(
+                    table_name=self.table_name,
+                    vector_size=768,  # Match text-embedding-005 output
+                )
+            except Exception as e:
+                # Table likely already exists - continue with existing schema
+                if "already exists" not in str(e).lower():
+                    raise
 
             # Create PostgresVectorStore with LangChain defaults
             # This uses standard column names that match the initialized table
