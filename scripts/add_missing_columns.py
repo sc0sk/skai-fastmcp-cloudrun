@@ -17,6 +17,16 @@ async def main():
     conn = await metadata_store._get_connection()
 
     try:
+        # Add default to speech_id if needed
+        try:
+            await conn.execute("""
+                ALTER TABLE speeches
+                ALTER COLUMN speech_id SET DEFAULT gen_random_uuid()::text
+            """)
+            print("✅ Added default to speech_id column")
+        except Exception as e:
+            print(f"⚠️  Could not set default for speech_id: {e}")
+
         # Add electorate column if missing
         await conn.execute("""
             ALTER TABLE speeches
