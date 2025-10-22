@@ -43,6 +43,11 @@ print("   🔍 search_hansard_speeches [read-only]")
 print("   📄 fetch_hansard_speech [read-only]")
 print("   📝 ingest_hansard_speech [write]")
 
+# Expose ASGI app for uvicorn (Cloud Run deployment)
+# FastMCP's http_app() method returns the Starlette ASGI application
+app = mcp.http_app()
+
 # The server is ready to be run with:
 # DANGEROUSLY_OMIT_AUTH=true fastmcp dev src/server.py (local dev)
 # PORT=8080 fastmcp run src/server.py (production with OAuth)
+# uvicorn src.server:app --host 0.0.0.0 --port 8080 (Cloud Run with uvicorn)

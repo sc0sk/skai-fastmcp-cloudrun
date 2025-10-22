@@ -52,5 +52,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Expose port (Cloud Run uses PORT env var)
 EXPOSE 8080
 
-# Start FastMCP server
-CMD ["fastmcp", "run", "src/server.py"]
+# Start FastMCP server with uvicorn (HTTP mode for Cloud Run)
+CMD ["sh", "-c", "uvicorn server:app --host 0.0.0.0 --port ${PORT:-8080}"]
