@@ -35,8 +35,9 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy application code
+# Copy application code and scripts
 COPY --chown=mcp:mcp src/ ./src/
+COPY --chown=mcp:mcp scripts/ ./scripts/
 
 # Switch to non-root user
 USER mcp
