@@ -17,16 +17,19 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON SEQUENCES TO "
 
 -- Create speeches table (full text storage)
 CREATE TABLE IF NOT EXISTS speeches (
-    speech_id TEXT PRIMARY KEY,
+    speech_id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     title TEXT NOT NULL,
     speaker TEXT NOT NULL,
     party TEXT,
     chamber TEXT,
+    electorate TEXT,
     state TEXT,
     date DATE NOT NULL,
     hansard_reference TEXT,
     full_text TEXT NOT NULL,
     word_count INTEGER,
+    content_hash TEXT UNIQUE,
+    topic_tags TEXT[],
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
