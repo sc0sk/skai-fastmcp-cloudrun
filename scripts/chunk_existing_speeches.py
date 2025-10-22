@@ -43,12 +43,12 @@ async def main():
     try:
         # Find speeches without chunks
         speeches_without_chunks = await conn.fetch("""
-            SELECT s.speech_id, s.title, s.full_text, s.speaker, s.party,
-                   s.chamber, s.state, s.date, s.hansard_reference
-            FROM speeches s
-            LEFT JOIN speech_chunks sc ON s.speech_id = sc.speech_id
-            WHERE sc.speech_id IS NULL
-            GROUP BY s.speech_id
+            SELECT speech_id, title, full_text, speaker, party,
+                   chamber, state, date, hansard_reference
+            FROM speeches
+            WHERE speech_id NOT IN (
+                SELECT DISTINCT speech_id FROM speech_chunks
+            )
         """)
 
         total = len(speeches_without_chunks)
