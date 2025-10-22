@@ -14,7 +14,8 @@ from fastmcp import FastMCP
 # Import tool functions (relative imports for FastMCP)
 from tools.search import search_hansard_speeches, SEARCH_TOOL_METADATA
 from tools.fetch import fetch_hansard_speech, FETCH_TOOL_METADATA
-from tools.ingest import ingest_hansard_speech, INGEST_TOOL_METADATA
+# Note: ingest tool imported but not registered for MCP (CLI/script access only)
+# from tools.ingest import ingest_hansard_speech, INGEST_TOOL_METADATA
 
 # Create FastMCP server instance
 mcp = FastMCP("Hansard MCP Server")
@@ -32,16 +33,15 @@ mcp.tool(
     annotations=FETCH_TOOL_METADATA["annotations"]
 )(fetch_hansard_speech)
 
-# Register ingest tool (write operation - no readOnlyHint)
-mcp.tool(
-    name=INGEST_TOOL_METADATA["name"]
-)(ingest_hansard_speech)
+# Note: ingest_hansard_speech tool is NOT registered for MCP access
+# Write operations are restricted to CLI/script access only for security
+# To ingest speeches, use: python scripts/ingest_speeches.py
 
 # Print startup message
 print("✅ Hansard MCP Server initialized with ChatGPT Developer Mode enhancements")
 print("   🔍 search_hansard_speeches [read-only]")
 print("   📄 fetch_hansard_speech [read-only]")
-print("   📝 ingest_hansard_speech [write]")
+print("   ⚠️  ingest_hansard_speech [disabled - CLI/script only]")
 
 # Expose ASGI app for uvicorn (Cloud Run deployment)
 # FastMCP's http_app() method returns the Starlette ASGI application

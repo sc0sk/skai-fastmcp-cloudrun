@@ -83,7 +83,8 @@ A developer asks ChatGPT a complex query that could be answered using either MCP
 
 ### Functional Requirements
 
-- **FR-001**: All tools MUST include `readOnlyHint: true` annotation since current tools perform only read operations
+- **FR-001**: All MCP-exposed tools MUST include `readOnlyHint: true` annotation (only read operations are exposed via MCP)
+- **FR-001a**: Write operations (ingest_hansard_speech) MUST be disabled for MCP access and only available via CLI/scripts
 - **FR-002**: Tool names MUST be action-oriented (e.g., "search_hansard_speeches" not just "search")
 - **FR-003**: Tool descriptions MUST include "Use this when..." guidance explaining when to prefer the tool over built-in capabilities
 - **FR-004**: Tool descriptions MUST explicitly state "Do not use built-in browsing or web search for Simon Kennedy parliamentary data"
