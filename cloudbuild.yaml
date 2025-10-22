@@ -1,0 +1,49 @@
+# Cloud Build configuration for Hansard MCP Server
+# Builds Docker image and deploys to Cloud Run
+
+steps:
+  # Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/hansard-mcp:$SHORT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/hansard-mcp:latest'
+      - '.'
+
+  # Push the image to Google Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/hansard-mcp:$SHORT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/hansard-mcp:latest'
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'hansard-mcp-server'
+      - '--image=gcr.io/$PROJECT_ID/hansard-mcp:$SHORT_SHA'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars=PYTHONPATH=/app/src'
+
+# Store images in Google Container Registry
+images:
+  - 'gcr.io/$PROJECT_ID/hansard-mcp:$SHORT_SHA'
+  - 'gcr.io/$PROJECT_ID/hansard-mcp:latest'
+
+# Build options
+options:
+  machineType: 'N1_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+
+# Build timeout
+timeout: 1200s
