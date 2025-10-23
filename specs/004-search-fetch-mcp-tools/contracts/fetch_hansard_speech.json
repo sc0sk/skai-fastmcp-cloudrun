@@ -1,0 +1,126 @@
+{
+  "name": "fetch_hansard_speech",
+  "description": "Fetch the complete text of a specific parliamentary speech by ID.\n\nUse this when: You have a speech ID from search results and need the full text for detailed analysis or quotation.\n\nDo not use: Built-in browsing to fetch Hansard speeches. This tool provides direct database access with full speech metadata.\n\nLimitations: Only retrieves Simon Kennedy's speeches. Speech IDs from other sources will fail.\n\nWorkflow: Typically used after search_hansard_speeches to retrieve complete text. You can also use speech IDs directly if known.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "speech_id": {
+        "type": "string",
+        "description": "Unique identifier for the speech, obtained from search_hansard_speeches results. Format: UUID v4 (e.g., '550e8400-e29b-41d4-a716-446655440000')"
+      }
+    },
+    "required": ["speech_id"]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "speech_id": {
+        "type": "string",
+        "description": "UUID of the speech"
+      },
+      "title": {
+        "type": "string",
+        "description": "Speech title/subject"
+      },
+      "full_text": {
+        "type": "string",
+        "description": "Complete speech transcript"
+      },
+      "speaker": {
+        "type": "string",
+        "description": "Name of the MP/Senator"
+      },
+      "party": {
+        "type": "string",
+        "description": "Political party"
+      },
+      "chamber": {
+        "type": "string",
+        "enum": ["House of Representatives", "Senate"],
+        "description": "Chamber where speech was delivered"
+      },
+      "electorate": {
+        "type": "string",
+        "description": "Electorate (House members only, null for Senators)"
+      },
+      "state": {
+        "type": "string",
+        "description": "Australian state/territory (NSW, VIC, QLD, WA, SA, TAS, ACT, NT)"
+      },
+      "date": {
+        "type": "string",
+        "format": "date",
+        "description": "Speech date in ISO 8601 format (YYYY-MM-DD)"
+      },
+      "hansard_reference": {
+        "type": "string",
+        "description": "Official Hansard citation"
+      },
+      "topic_tags": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Array of topic tags (lowercase)"
+      },
+      "word_count": {
+        "type": "integer",
+        "description": "Total word count (computed from full_text)"
+      },
+      "content_hash": {
+        "type": "string",
+        "description": "SHA-256 hash of full_text (for deduplication)"
+      }
+    },
+    "required": [
+      "speech_id",
+      "title",
+      "full_text",
+      "speaker",
+      "party",
+      "chamber",
+      "date",
+      "hansard_reference",
+      "topic_tags",
+      "word_count",
+      "content_hash"
+    ]
+  },
+  "examples": [
+    {
+      "input": {
+        "speech_id": "550e8400-e29b-41d4-a716-446655440000"
+      },
+      "output": {
+        "speech_id": "550e8400-e29b-41d4-a716-446655440000",
+        "title": "Matter of Public Importance: Housing Affordability",
+        "full_text": "Mr Speaker, I rise to speak on the matter of housing affordability, one of the most pressing challenges facing young Australians today. The current housing crisis is not just about numbers and statistics; it is about real people and real families who are struggling to find a place to call home...",
+        "speaker": "Simon Kennedy",
+        "party": "Liberal",
+        "chamber": "House of Representatives",
+        "electorate": "Cook",
+        "state": "NSW",
+        "date": "2024-06-03",
+        "hansard_reference": "House Hansard, 3 June 2024, p.245",
+        "topic_tags": ["housing", "affordability", "urban planning", "first home buyers"],
+        "word_count": 1847,
+        "content_hash": "a3f8d9c2e1b4f7e6d5c8b9a1e2f3d4c5b6a7e8f9d0c1b2a3e4f5d6c7b8a9"
+      }
+    },
+    {
+      "input": {
+        "speech_id": "invalid-uuid"
+      },
+      "error": {
+        "type": "ValueError",
+        "message": "Speech not found: invalid-uuid"
+      }
+    }
+  ],
+  "annotations": {
+    "readOnlyHint": true,
+    "idempotentHint": true,
+    "openWorldHint": false
+  },
+  "tags": ["fetch", "parliamentary-data", "hansard"]
+}
