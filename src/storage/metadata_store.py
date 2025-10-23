@@ -8,6 +8,7 @@ import asyncpg
 from contextlib import asynccontextmanager
 from google.cloud.sql.connector import Connector
 from dotenv import load_dotenv
+from fastmcp import Context
 
 from src.models.speech import SpeechMetadata
 
@@ -94,12 +95,13 @@ class MetadataStore:
         # This is simpler and works with Cloud SQL Connector
         raise NotImplementedError("Use _get_connection() instead")
 
-    async def add_speech(self, speech: SpeechMetadata) -> str:
+    async def add_speech(self, speech: SpeechMetadata, ctx: Optional[Context] = None) -> str:
         """
         Add speech metadata to database.
 
         Args:
             speech: SpeechMetadata instance
+            ctx: Optional FastMCP Context for progress reporting
 
         Returns:
             Generated speech_id (UUID)
@@ -125,6 +127,10 @@ class MetadataStore:
         conn = await self._get_connection()
 
         try:
+            # Report progress before insert (90%)
+            if ctx:
+                await ctx.report_progress(90, 100)
+
             # Check for duplicate via content_hash
             existing = await conn.fetchval(
                 "SELECT speech_id FROM speeches WHERE content_hash = $1",
@@ -159,6 +165,10 @@ class MetadataStore:
                 speech.content_hash,
                 speech.topic_tags or [],
             )
+
+            # Report 100% completion after successful insert
+            if ctx:
+                await ctx.report_progress(100, 100)
 
             return str(speech_id)
         finally:

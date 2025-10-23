@@ -7,6 +7,7 @@ import os
 import asyncio
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
+from fastmcp import Context
 
 # Load environment variables
 load_dotenv()
@@ -126,6 +127,7 @@ class VectorStoreService:
         texts: List[str],
         metadatas: List[Dict[str, Any]],
         speech_id: str,
+        ctx: Optional[Context] = None,  # Progress reporting context
     ) -> List[str]:
         """
         Add speech chunks to vector store with embeddings.
@@ -134,6 +136,7 @@ class VectorStoreService:
             texts: List of chunk texts
             metadatas: List of metadata dicts (one per chunk)
             speech_id: Parent speech ID (UUID)
+            ctx: Optional FastMCP Context for progress reporting
 
         Returns:
             List of generated chunk IDs
@@ -166,11 +169,25 @@ class VectorStoreService:
 
         vector_store = await self._get_vector_store()
 
+        # Progress tracking for embedding stage (40-70%)
+        if ctx:
+            total_chunks = len(texts)
+            last_reported_progress = 40.0  # Start of embedding stage
+
         # Add documents with embeddings (LangChain handles embedding generation)
+        # Note: LangChain's aadd_texts is a batch operation, so we can't report
+        # progress per chunk. Instead, we report at the start and end of embedding.
+        if ctx:
+            await ctx.report_progress(40, 100)  # Start of embedding stage
+
         chunk_ids = await vector_store.aadd_texts(
             texts=texts,
             metadatas=metadatas,
         )
+
+        # Report completion of embedding stage
+        if ctx:
+            await ctx.report_progress(70, 100)  # End of embedding stage
 
         return chunk_ids
 
