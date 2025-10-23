@@ -1,0 +1,209 @@
+{
+  "version": "1.0",
+  "testSuite": "Gemini CLI Hansard MCP Integration",
+  "description": "Verification test scenarios to confirm correct Gemini CLI setup with Hansard MCP server (STDIO or SSE transport)",
+  "documentation": "Run these tests after configuring Gemini CLI to verify server connection, tool discovery, and query execution",
+
+  "scenarios": [
+    {
+      "id": "test-001",
+      "name": "Tool Discovery",
+      "priority": "P1",
+      "description": "Verify that Gemini CLI can discover the three Hansard MCP tools from the server",
+      "transport": ["stdio", "sse"],
+      "category": "Setup Verification",
+
+      "userInstruction": "Ask Gemini: 'What MCP tools are available from the Hansard server?'",
+      "alternativeCommands": [
+        "List all available Hansard tools",
+        "Show me the Hansard MCP capabilities",
+        "What can I do with the Hansard server?"
+      ],
+
+      "expectedBehavior": "Gemini responds with a list of three tools: hansard_search, hansard_fetch, and hansard_ingest with their descriptions",
+      "successCriteria": [
+        "Response includes tool name 'hansard_search'",
+        "Response includes tool name 'hansard_fetch'",
+        "Response includes tool name 'hansard_ingest'",
+        "Each tool has a description explaining its purpose"
+      ],
+
+      "sampleOutput": "Available Hansard tools:\n1. hansard_search - Search Australian parliamentary speeches by keywords\n2. hansard_fetch - Retrieve full speech text by ID\n3. hansard_ingest - Add new speeches to the database",
+
+      "estimatedTime": 5,
+      "failureDebugging": {
+        "symptom": "No tools listed or 'server not found' error",
+        "diagnosticSteps": [
+          "Verify Gemini CLI config file exists and has hansard entry",
+          "Check server starts manually: DANGEROUSLY_OMIT_AUTH=true fastmcp dev src/server.py",
+          "Review Gemini CLI logs: ~/.config/gemini-cli/logs/mcp.log",
+          "Restart Gemini CLI: gemini restart"
+        ]
+      }
+    },
+
+    {
+      "id": "test-002",
+      "name": "Search Query Execution",
+      "priority": "P1",
+      "description": "Verify that hansard_search tool executes successfully and returns speech results",
+      "transport": ["stdio", "sse"],
+      "category": "Core Functionality",
+
+      "userInstruction": "Ask Gemini: 'Search Hansard for speeches about climate change policy'",
+      "alternativeCommands": [
+        "Find parliamentary speeches discussing climate change",
+        "Search for climate policy debates in Hansard",
+        "Show me speeches about renewable energy"
+      ],
+
+      "expectedBehavior": "Gemini executes hansard_search tool and returns a list of speeches with metadata (speaker, date, chamber, excerpt)",
+      "successCriteria": [
+        "At least 1 search result is returned",
+        "Each result includes speaker name",
+        "Each result includes speech date",
+        "Each result includes chamber (House of Representatives or Senate)",
+        "Each result includes text excerpt containing search terms"
+      ],
+
+      "sampleOutput": "Found 3 speeches about climate change:\n\n1. Speaker: Hon. Anthony Albanese MP\n   Date: 2023-09-15\n   Chamber: House of Representatives\n   Excerpt: '...our government is committed to climate action and reducing emissions by 43% by 2030...'\n\n2. Speaker: Sen. Penny Wong\n   Date: 2023-08-22\n   Chamber: Senate\n   Excerpt: '...climate change is the defining challenge of our generation...'",
+
+      "estimatedTime": 10,
+      "prerequisites": [
+        "Database must be initialized (not empty)",
+        "At least one speech about climate change must exist in database"
+      ],
+
+      "failureDebugging": {
+        "symptom": "Zero results returned or 'database error'",
+        "diagnosticSteps": [
+          "Verify database exists: ls data/hansard.db (for SQLite)",
+          "Check database has data: python scripts/check_database.py",
+          "Ingest sample data: python scripts/ingest_sample.py",
+          "Try simpler query: 'Search Hansard for any speeches'"
+        ]
+      }
+    },
+
+    {
+      "id": "test-003",
+      "name": "Speech Fetch by ID",
+      "priority": "P2",
+      "description": "Verify that hansard_fetch tool retrieves complete speech text by ID",
+      "transport": ["stdio", "sse"],
+      "category": "Core Functionality",
+
+      "userInstruction": "First run test-002 to get a speech ID, then ask Gemini: 'Fetch the full text of Hansard speech ID [SPEECH_ID]'",
+      "alternativeCommands": [
+        "Get the complete transcript for speech [SPEECH_ID]",
+        "Show me the full text of speech [SPEECH_ID]",
+        "Retrieve Hansard speech [SPEECH_ID]"
+      ],
+
+      "expectedBehavior": "Gemini executes hansard_fetch tool and returns the complete speech text with full metadata",
+      "successCriteria": [
+        "Response includes complete speech text (not just excerpt)",
+        "Response includes speech_id matching the requested ID",
+        "Response includes speaker name and party affiliation",
+        "Response includes date and time of speech",
+        "Response includes chamber (House or Senate)",
+        "Speech text is longer than search excerpt (full transcript)"
+      ],
+
+      "sampleOutput": "Speech ID: hansard-2023-09-15-reps-12345\nSpeaker: Hon. Anthony Albanese MP (Australian Labor Party)\nDate: 2023-09-15 14:30:00\nChamber: House of Representatives\n\nFull Text:\nMr. Speaker, I rise today to address this parliament on the critical issue of climate change and our government's comprehensive plan to achieve net zero emissions by 2050. [... complete speech text continues for several paragraphs ...]",
+
+      "estimatedTime": 5,
+      "prerequisites": [
+        "Must complete test-002 first to obtain valid speech ID",
+        "Speech ID must exist in database"
+      ],
+
+      "failureDebugging": {
+        "symptom": "Speech not found or invalid ID error",
+        "diagnosticSteps": [
+          "Verify speech ID format is correct (copy exactly from test-002 results)",
+          "Check database contains speech: python scripts/check_speech.py SPEECH_ID",
+          "Try different speech ID from test-002 results",
+          "Verify database connection: same as test-002 debugging"
+        ]
+      }
+    },
+
+    {
+      "id": "test-004",
+      "name": "Ingest New Speech (Optional)",
+      "priority": "P3",
+      "description": "Verify that hansard_ingest tool can add a new speech to the database",
+      "transport": ["stdio"],
+      "category": "Advanced Functionality",
+      "warning": "This test modifies the database. Only run on local development database, not production.",
+
+      "userInstruction": "Ask Gemini: 'Ingest a test speech with speaker John Doe, date 2023-10-23, chamber House, text \"This is a test speech about infrastructure funding.\"'",
+      "alternativeCommands": [
+        "Add a new speech to Hansard database",
+        "Ingest this speech: [provide JSON speech data]"
+      ],
+
+      "expectedBehavior": "Gemini executes hansard_ingest tool, adds speech to database, and returns confirmation with generated speech_id",
+      "successCriteria": [
+        "Response includes success message",
+        "Response includes newly generated speech_id",
+        "Subsequent search for 'infrastructure funding' returns the new speech"
+      ],
+
+      "sampleOutput": "Successfully ingested speech into database.\nGenerated Speech ID: hansard-2023-10-23-house-test-67890\n\nYou can now search for this speech or fetch it by ID.",
+
+      "estimatedTime": 5,
+      "prerequisites": [
+        "STDIO transport only (not recommended for SSE/production)",
+        "Database write permissions (local development mode)",
+        "DANGEROUSLY_OMIT_AUTH=true enabled"
+      ],
+
+      "failureDebugging": {
+        "symptom": "Permission denied or database locked error",
+        "diagnosticSteps": [
+          "Verify using STDIO transport (not SSE)",
+          "Check database file permissions: ls -l data/hansard.db",
+          "Verify DANGEROUSLY_OMIT_AUTH is set in config",
+          "Try closing other database connections"
+        ]
+      }
+    }
+  ],
+
+  "executionGuidelines": {
+    "recommendedOrder": ["test-001", "test-002", "test-003"],
+    "optionalTests": ["test-004"],
+    "estimatedTotalTime": "20 minutes for core tests (001-003)",
+
+    "beforeYouBegin": [
+      "Complete Gemini CLI configuration (STDIO or SSE)",
+      "Verify database is initialized and populated",
+      "Restart Gemini CLI to load configuration"
+    ],
+
+    "successDefinition": "All P1 tests (001-002) pass. This confirms Gemini CLI can connect to server and execute core search/fetch operations.",
+
+    "troubleshootingResources": [
+      "Local setup guide: specs/009-gemini-cli-integration/quickstart.md",
+      "Troubleshooting guide: docs/gemini-cli/troubleshooting.md",
+      "Configuration examples: specs/009-gemini-cli-integration/contracts/"
+    ]
+  },
+
+  "testEnvironments": {
+    "local-stdio": {
+      "transport": "stdio",
+      "database": "SQLite local file",
+      "authentication": "DANGEROUSLY_OMIT_AUTH=true",
+      "recommendedFor": "Development, testing, offline use"
+    },
+    "remote-sse": {
+      "transport": "sse",
+      "database": "Cloud SQL PostgreSQL",
+      "authentication": "Google Cloud identity token",
+      "recommendedFor": "Production, team collaboration"
+    }
+  }
+}

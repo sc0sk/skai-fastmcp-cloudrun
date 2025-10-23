@@ -1,0 +1,71 @@
+{
+  "//": "==========================================================================",
+  "//": "Gemini CLI Configuration: Hansard MCP Server (STDIO Transport)",
+  "//": "==========================================================================",
+  "//": "",
+  "//": "PURPOSE: Local development configuration for connecting Gemini CLI to",
+  "//": "         Hansard MCP server via STDIO transport (direct process I/O).",
+  "//": "",
+  "//": "TRANSPORT: STDIO - Launches local FastMCP server as child process",
+  "//": "USE CASE: Local development, testing, offline access to Hansard data",
+  "//": "",
+  "//": "SETUP INSTRUCTIONS:",
+  "//": "1. Copy this entire mcpServers configuration block",
+  "//": "2. Paste into your Gemini CLI config file:",
+  "//": "   - macOS/Linux: ~/.config/gemini-cli/config.json",
+  "//": "   - Windows: %APPDATA%/gemini-cli/config.json",
+  "//": "3. Update PYTHONPATH to your absolute project path",
+  "//": "4. Update DATABASE_URL if using custom database location",
+  "//": "5. Restart Gemini CLI: gemini restart",
+  "//": "",
+  "//": "==========================================================================",
+
+  "mcpServers": {
+    "hansard": {
+      "//": "---------- TRANSPORT CONFIGURATION ----------",
+      "command": "fastmcp",
+      "//": "Command to launch MCP server. Must be in PATH or use absolute path.",
+      "//": "Alternative: \"/home/user/.local/bin/fastmcp\" for absolute path",
+
+      "args": ["run", "src/server.py"],
+      "//": "Arguments passed to fastmcp command.",
+      "//": "- 'run': FastMCP run mode (production)",
+      "//": "- 'src/server.py': Path to server entry point (relative to PYTHONPATH)",
+      "//": "Alternative: Use 'dev' instead of 'run' for development mode with auto-reload",
+
+      "//": "---------- ENVIRONMENT VARIABLES ----------",
+      "env": {
+        "DANGEROUSLY_OMIT_AUTH": "true",
+        "//": "CRITICAL FOR LOCAL DEV: Bypasses GitHub OAuth authentication.",
+        "//": "NEVER use this in production or remote deployments.",
+        "//": "Remove this variable when deploying to Cloud Run.",
+
+        "DATABASE_URL": "sqlite:////absolute/path/to/skai-fastmcp-cloudrun/data/hansard.db",
+        "//": "Database connection string. MUST be absolute path for SQLite.",
+        "//": "Format: sqlite:////absolute/path/to/database.db (4 slashes for absolute)",
+        "//": "Example macOS: sqlite:////Users/alice/projects/skai-fastmcp-cloudrun/data/hansard.db",
+        "//": "Example Linux: sqlite:////home/user/skai-fastmcp-cloudrun/data/hansard.db",
+        "//": "Example Windows: sqlite:///C:/Users/Alice/Projects/skai-fastmcp-cloudrun/data/hansard.db",
+
+        "PYTHONPATH": "/absolute/path/to/skai-fastmcp-cloudrun",
+        "//": "REQUIRED: Absolute path to project root for Python imports.",
+        "//": "Do NOT use relative paths (~, ., ..) or environment variables.",
+        "//": "Example macOS: /Users/alice/projects/skai-fastmcp-cloudrun",
+        "//": "Example Linux: /home/user/skai-fastmcp-cloudrun",
+        "//": "Example Windows: C:/Users/Alice/Projects/skai-fastmcp-cloudrun",
+
+        "LOG_LEVEL": "INFO",
+        "//": "Optional: Logging verbosity. Options: DEBUG, INFO, WARNING, ERROR",
+        "//": "Use DEBUG for troubleshooting connection issues."
+      },
+
+      "//": "---------- OPTIONAL PARAMETERS ----------",
+      "timeout": 30,
+      "//": "Connection timeout in seconds. Default: 30",
+      "//": "Increase if database queries are slow or server startup is delayed.",
+
+      "description": "Australian Hansard parliamentary speech search (local development)",
+      "//": "User-facing description shown in Gemini CLI interface."
+    }
+  }
+}
