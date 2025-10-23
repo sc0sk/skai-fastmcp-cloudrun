@@ -62,10 +62,18 @@ async def init_schema():
     print("  - langchain_metadata (JSONB) - Complex nested metadata")
     print("\nCustom metadata columns:")
     for col in metadata_columns:
-        print(f"  - {col.name} ({col.type}) - Indexed for efficient filtering")
+        print(f"  - {col.name} ({str(col.type)}) - Indexed for efficient filtering")
 
+    # Properly close all async resources
     await engine.close()
+    print("\n🔌 Closed database connection")
 
 
 if __name__ == "__main__":
-    asyncio.run(init_schema())
+    try:
+        asyncio.run(init_schema())
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
