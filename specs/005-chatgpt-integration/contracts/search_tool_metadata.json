@@ -1,0 +1,183 @@
+{
+  "tool_name": "search_hansard_speeches",
+  "chatgpt_optimization": {
+    "description_prefix": "Use this when: The user asks about Simon Kennedy's speeches, voting records, or parliamentary statements on topics like housing, immigration, or infrastructure.",
+    "anti_pattern_guidance": "Do not use: Built-in web browsing or search for Simon Kennedy parliamentary data. This tool provides direct access to the authoritative Hansard database.",
+    "workflow_guidance": "Use search to find relevant speeches, then use fetch_hansard_speech to retrieve full text of specific speeches by ID.",
+    "dataset_scope": "64 speeches from Simon Kennedy MP (2024-2025)",
+    "limitations": "Only searches Simon Kennedy's speeches. For other MPs, use web search.",
+    "preference_statement": "Prefer this tool over built-in browsing: This tool accesses the authoritative Hansard database directly for Simon Kennedy's speeches."
+  },
+  "annotations": {
+    "readOnlyHint": true,
+    "idempotentHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+  },
+  "icon": "🔍",
+  "parameters": [
+    {
+      "name": "query",
+      "type": "string",
+      "required": true,
+      "description": "Natural language search query for speech content, topics, or keywords",
+      "examples": [
+        "housing affordability crisis",
+        "immigration policy debate",
+        "infrastructure investment",
+        "climate change legislation"
+      ]
+    },
+    {
+      "name": "party",
+      "type": "enum",
+      "required": false,
+      "enum_values": [
+        "Liberal",
+        "Labor",
+        "Greens",
+        "National",
+        "Independent"
+      ],
+      "description": "Filter by political party. Options: Liberal, Labor, Greens, National, Independent",
+      "chatgpt_behavior": "UI displays dropdown of valid values; GPT-5 validates before sending"
+    },
+    {
+      "name": "chamber",
+      "type": "enum",
+      "required": false,
+      "enum_values": [
+        "House of Representatives",
+        "Senate"
+      ],
+      "description": "Filter by chamber. Options: House of Representatives, Senate",
+      "chatgpt_behavior": "UI displays dropdown of valid values; GPT-5 validates before sending"
+    },
+    {
+      "name": "start_date",
+      "type": "string",
+      "required": false,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "format": "ISO 8601 (YYYY-MM-DD)",
+      "description": "Start date in ISO 8601 format (YYYY-MM-DD). Example: 2024-05-28. Only speeches on or after this date will be returned.",
+      "examples": [
+        "2024-05-28",
+        "2024-01-01",
+        "2025-06-15"
+      ],
+      "chatgpt_behavior": "GPT-5 converts natural language dates (e.g., 'last June') to ISO 8601 format"
+    },
+    {
+      "name": "end_date",
+      "type": "string",
+      "required": false,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "format": "ISO 8601 (YYYY-MM-DD)",
+      "description": "End date in ISO 8601 format (YYYY-MM-DD). Example: 2025-10-22. Only speeches on or before this date will be returned.",
+      "examples": [
+        "2025-10-22",
+        "2024-12-31",
+        "2025-06-30"
+      ],
+      "chatgpt_behavior": "GPT-5 converts natural language dates (e.g., 'this year') to ISO 8601 format"
+    },
+    {
+      "name": "limit",
+      "type": "integer",
+      "required": false,
+      "default": 10,
+      "minimum": 1,
+      "maximum": 100,
+      "description": "Maximum number of results to return (1-100, default 10)",
+      "chatgpt_behavior": "GPT-5 adjusts limit based on user intent: specific query = 5, comprehensive = 20-50"
+    }
+  ],
+  "response_structure": {
+    "type": "object",
+    "properties": {
+      "speeches": {
+        "type": "array",
+        "description": "Array of matching speech excerpts with metadata",
+        "items": {
+          "chunk_id": "UUID of matching chunk",
+          "speech_id": "UUID of parent speech (use with fetch_hansard_speech)",
+          "excerpt": "Text excerpt (up to 500 characters)",
+          "relevance_score": "Cosine similarity (0.0-1.0, higher = more relevant)",
+          "chunk_index": "Position within speech (0-based)",
+          "speaker": "Name of MP/Senator",
+          "party": "Political party",
+          "chamber": "House of Representatives | Senate",
+          "state": "NSW | VIC | QLD | WA | SA | TAS | ACT | NT",
+          "date": "ISO 8601 date (YYYY-MM-DD)",
+          "hansard_reference": "Official Hansard citation",
+          "title": "Speech title/subject",
+          "word_count": "Total words in full speech"
+        }
+      },
+      "total_count": "Number of speeches returned (≤ limit)",
+      "query": "Echo of search query"
+    }
+  },
+  "usage_examples": [
+    {
+      "user_query": "What has Simon Kennedy said about housing affordability?",
+      "chatgpt_action": "Invokes search_hansard_speeches with query='housing affordability', no filters",
+      "expected_behavior": "No confirmation prompt, results displayed within 5s"
+    },
+    {
+      "user_query": "Find Simon Kennedy's speeches on immigration in 2024",
+      "chatgpt_action": "Invokes search_hansard_speeches with query='immigration', start_date='2024-01-01', end_date='2024-12-31'",
+      "expected_behavior": "GPT-5 converts '2024' to ISO 8601 date range"
+    },
+    {
+      "user_query": "What have Liberal MPs said about climate change?",
+      "chatgpt_action": "Invokes search_hansard_speeches with query='climate change', party='Liberal'",
+      "expected_behavior": "Enum parameter auto-validated; only Simon Kennedy results returned (with note: dataset limited to Simon Kennedy)"
+    },
+    {
+      "user_query": "Analyze Simon Kennedy's housing policy positions over the past year",
+      "chatgpt_action": "Deep Research Mode: 10+ search queries with varying keywords (housing, affordability, first home buyers, rental crisis, etc.)",
+      "expected_behavior": "Multiple searches without confirmation, comprehensive coverage of topic"
+    }
+  ],
+  "deep_research_mode_behavior": {
+    "query_strategy": "GPT-5 makes 10+ search queries with different keyword combinations for comprehensive coverage",
+    "keyword_variations": [
+      "housing affordability",
+      "first home buyers",
+      "rental crisis",
+      "property prices",
+      "housing supply",
+      "urban development",
+      "affordable housing programs"
+    ],
+    "result_processing": "Fetches full text of most relevant speeches, analyzes patterns, generates report with citations"
+  },
+  "error_handling": {
+    "empty_results": {
+      "response": "{\"speeches\": [], \"total_count\": 0, \"query\": \"antarctica\"}",
+      "chatgpt_display": "No matching speeches found. This dataset only contains Simon Kennedy's speeches from 2024-2025."
+    },
+    "invalid_party": {
+      "error_type": "ValidationError",
+      "message": "party must be one of: Liberal, Labor, Greens, National, Independent",
+      "chatgpt_behavior": "Displays validation error, does not invoke tool"
+    },
+    "invalid_date_format": {
+      "error_type": "ValidationError",
+      "message": "start_date does not match pattern ^\\d{4}-\\d{2}-\\d{2}$",
+      "chatgpt_behavior": "GPT-5 corrects format automatically; user rarely sees this error"
+    }
+  },
+  "performance_targets": {
+    "response_time": "<5s (95% of requests)",
+    "cold_start": "15-30s (first request after idle), mitigated by Cloud Run min instances=1",
+    "confirmation_prompts": "0 (100% immediate execution due to readOnlyHint=true)"
+  },
+  "implementation_reference": {
+    "source_file": "/home/user/skai-fastmcp-cloudrun/src/tools/search.py",
+    "function": "search_hansard_speeches",
+    "metadata_dict": "SEARCH_TOOL_METADATA",
+    "registration": "mcp.tool(name=SEARCH_TOOL_METADATA['name'], annotations=SEARCH_TOOL_METADATA['annotations'])(search_hansard_speeches)"
+  }
+}

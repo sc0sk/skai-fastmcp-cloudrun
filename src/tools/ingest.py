@@ -8,6 +8,7 @@ from fastmcp import Context
 from src.models.speech import SpeechMetadata
 from src.storage.vector_store import get_default_vector_store
 from src.storage.metadata_store import get_default_metadata_store
+from src.utils.debug import format_debug_message, sanitize_debug_data, TimingContext
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 # Progress stages (percentage ranges)
@@ -54,116 +55,138 @@ async def ingest_hansard_speech(
     Note: This is a write operation that modifies the database. Use with caution.
     """
     try:
-        # Stage 1: Validation (0-20%)
+        # Debug: Log entry with sanitized metadata
         if ctx:
-            await ctx.report_progress(STAGE_VALIDATION[0], 100)
-            await ctx.info("Validating speech data...")
-
-        # Validate and parse speech_data
-        # Extract required fields
-        required_fields = ["title", "full_text", "speaker", "party", "chamber", "date", "hansard_reference"]
-        missing_fields = [f for f in required_fields if f not in speech_data or not speech_data.get(f)]
-
-        if missing_fields:
-            raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
-
-        # Parse date if string
-        speech_date = speech_data["date"]
-        if isinstance(speech_date, str):
-            speech_date = datetime.fromisoformat(speech_date.replace("Z", "+00:00")).date()
-
-        # Create SpeechMetadata instance for validation
-        speech = SpeechMetadata(
-            title=speech_data["title"],
-            full_text=speech_data["full_text"],
-            speaker=speech_data["speaker"],
-            party=speech_data["party"],
-            chamber=speech_data["chamber"],
-            electorate=speech_data.get("electorate"),
-            state=speech_data.get("state"),
-            date=speech_date,
-            hansard_reference=speech_data["hansard_reference"],
-            topic_tags=speech_data.get("topic_tags", []),
-            source_url=speech_data.get("source_url"),
-        )
-
-        if ctx:
-            await ctx.report_progress(STAGE_CHUNKING[0], 100)
-            await ctx.info("Chunking speech text...")
-
-        # Stage 2: Chunking (20-40%)
-        # Use LangChain's RecursiveCharacterTextSplitter for intelligent chunking
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,  # ~200 words
-            chunk_overlap=100,  # Overlap for context continuity
-            length_function=len,
-            separators=["\n\n", "\n", ". ", " ", ""],
-        )
-
-        chunks = text_splitter.split_text(speech.full_text)
-
-        # Create metadata for each chunk
-        chunk_metadatas = []
-        for i, chunk in enumerate(chunks):
-            chunk_metadatas.append({
-                "speech_id": None,  # Will be set after speech insertion
-                "chunk_index": i,
-                "chunk_size": len(chunk),
-                "speaker": speech.speaker,
-                "party": speech.party,
-                "chamber": speech.chamber,
-                "date": speech.date,
-                "topic_tags": speech.topic_tags,
-                "hansard_reference": speech.hansard_reference,
-                "title": speech.title,
+            metadata = sanitize_debug_data({
+                "speaker": speech_data.get("speaker"),
+                "date": speech_data.get("date"),
+                "chamber": speech_data.get("chamber"),
+                "text_length": len(speech_data.get("full_text", "")),
+                "generate_embeddings": generate_embeddings,
             })
+            await ctx.debug(format_debug_message("ingest_hansard_speech", "Starting ingestion", **metadata))
 
-        # First, add speech metadata to get speech_id
-        if ctx:
-            await ctx.report_progress(STAGE_METADATA_STORAGE[0], 100)
-            await ctx.info("Storing speech metadata...")
-
-        # Stage 5: Metadata storage (90-100%)
-        metadata_store = await get_default_metadata_store()
-        speech_id = await metadata_store.add_speech(speech, ctx=ctx)
-
-        # Update chunk metadata with speech_id
-        for meta in chunk_metadatas:
-            meta["speech_id"] = speech_id
-
-        # Stage 3 & 4: Embedding and Vector Storage (40-90%)
-        if generate_embeddings and chunks:
+        async with TimingContext(ctx, "ingest_hansard_speech.total"):
+            # Stage 1: Validation (0-20%)
             if ctx:
-                await ctx.report_progress(STAGE_EMBEDDING[0], 100)
-                await ctx.info("Generating embeddings...")
+                await ctx.report_progress(STAGE_VALIDATION[0], 100)
+                await ctx.info("Validating speech data...")
 
-            vector_store = await get_default_vector_store()
-            chunk_ids = await vector_store.add_chunks(
-                texts=chunks,
-                metadatas=chunk_metadatas,
-                speech_id=speech_id,
-                ctx=ctx  # Pass context for sub-progress
-            )
+            async with TimingContext(ctx, "ingest_hansard_speech.validation"):
+                # Validate and parse speech_data
+                # Extract required fields
+                required_fields = ["title", "full_text", "speaker", "party", "chamber", "date", "hansard_reference"]
+                missing_fields = [f for f in required_fields if f not in speech_data or not speech_data.get(f)]
+
+                if missing_fields:
+                    raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
+
+                # Parse date if string
+                speech_date = speech_data["date"]
+                if isinstance(speech_date, str):
+                    speech_date = datetime.fromisoformat(speech_date.replace("Z", "+00:00")).date()
+
+                # Create SpeechMetadata instance for validation
+                speech = SpeechMetadata(
+                    title=speech_data["title"],
+                    full_text=speech_data["full_text"],
+                    speaker=speech_data["speaker"],
+                    party=speech_data["party"],
+                    chamber=speech_data["chamber"],
+                    electorate=speech_data.get("electorate"),
+                    state=speech_data.get("state"),
+                    date=speech_date,
+                    hansard_reference=speech_data["hansard_reference"],
+                    topic_tags=speech_data.get("topic_tags", []),
+                    source_url=speech_data.get("source_url"),
+                )
 
             if ctx:
-                await ctx.info(f"Stored {len(chunk_ids)} chunks with embeddings")
-        else:
-            chunk_ids = []
+                await ctx.report_progress(STAGE_CHUNKING[0], 100)
+                await ctx.info("Chunking speech text...")
+
+            # Stage 2: Chunking (20-40%)
+            async with TimingContext(ctx, "ingest_hansard_speech.chunking"):
+                # Use LangChain's RecursiveCharacterTextSplitter for intelligent chunking
+                text_splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=1000,  # ~200 words
+                    chunk_overlap=100,  # Overlap for context continuity
+                    length_function=len,
+                    separators=["\n\n", "\n", ". ", " ", ""],
+                )
+
+                chunks = text_splitter.split_text(speech.full_text)
+
             if ctx:
-                await ctx.info("Skipped embedding generation (generate_embeddings=False)")
+                avg_size = sum(len(c) for c in chunks) / len(chunks) if chunks else 0
+                await ctx.debug(f"ingest_hansard_speech: Chunks created (count={len(chunks)}, avg_size={avg_size:.0f})")
 
-        # Final completion
-        if ctx:
-            await ctx.report_progress(100, 100)
-            await ctx.info("Speech ingestion complete!")
+            # Create metadata for each chunk
+            chunk_metadatas = []
+            for i, chunk in enumerate(chunks):
+                chunk_metadatas.append({
+                    "speech_id": None,  # Will be set after speech insertion
+                    "chunk_index": i,
+                    "chunk_size": len(chunk),
+                    "speaker": speech.speaker,
+                    "party": speech.party,
+                    "chamber": speech.chamber,
+                    "date": speech.date,
+                    "topic_tags": speech.topic_tags,
+                    "hansard_reference": speech.hansard_reference,
+                    "title": speech.title,
+                })
 
-        return {
-            "status": "success",
-            "message": f"Successfully ingested speech with {len(chunks)} chunks",
-            "speech_id": speech_id,
-            "chunk_count": len(chunks),
-            "chunk_ids": chunk_ids if generate_embeddings else [],
-        }
+            # First, add speech metadata to get speech_id
+            if ctx:
+                await ctx.report_progress(STAGE_METADATA_STORAGE[0], 100)
+                await ctx.info("Storing speech metadata...")
+
+            # Stage 5: Metadata storage (90-100%)
+            async with TimingContext(ctx, "ingest_hansard_speech.metadata_storage"):
+                metadata_store = await get_default_metadata_store()
+                speech_id = await metadata_store.add_speech(speech, ctx=ctx)
+
+            # Update chunk metadata with speech_id
+            for meta in chunk_metadatas:
+                meta["speech_id"] = speech_id
+
+            # Stage 3 & 4: Embedding and Vector Storage (40-90%)
+            if generate_embeddings and chunks:
+                if ctx:
+                    await ctx.report_progress(STAGE_EMBEDDING[0], 100)
+                    await ctx.info("Generating embeddings...")
+
+                async with TimingContext(ctx, "ingest_hansard_speech.embedding_and_storage"):
+                    vector_store = await get_default_vector_store()
+                    chunk_ids = await vector_store.add_chunks(
+                        texts=chunks,
+                        metadatas=chunk_metadatas,
+                        speech_id=speech_id,
+                        ctx=ctx  # Pass context for sub-progress
+                    )
+
+                if ctx:
+                    await ctx.info(f"Stored {len(chunk_ids)} chunks with embeddings")
+                    await ctx.debug(f"ingest_hansard_speech: Vector storage complete (chunk_ids={len(chunk_ids)})")
+            else:
+                chunk_ids = []
+                if ctx:
+                    await ctx.info("Skipped embedding generation (generate_embeddings=False)")
+
+            # Final completion
+            if ctx:
+                await ctx.report_progress(100, 100)
+                await ctx.info("Speech ingestion complete!")
+                await ctx.debug(f"ingest_hansard_speech: Ingestion complete (speech_id={speech_id})")
+
+            return {
+                "status": "success",
+                "message": f"Successfully ingested speech with {len(chunks)} chunks",
+                "speech_id": speech_id,
+                "chunk_count": len(chunks),
+                "chunk_ids": chunk_ids if generate_embeddings else [],
+            }
 
     except ValueError as e:
         # Validation error - don't report 100% progress

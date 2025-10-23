@@ -1,0 +1,151 @@
+{
+  "tool_name": "fetch_hansard_speech",
+  "chatgpt_optimization": {
+    "description_prefix": "Use this when: You have a speech ID from search results and need the full text for detailed analysis or quotation.",
+    "anti_pattern_guidance": "Do not use: Built-in browsing to fetch Hansard speeches. This tool provides direct database access with full speech metadata.",
+    "workflow_guidance": "Typically used after search_hansard_speeches to retrieve complete text. You can also use speech IDs directly if known.",
+    "dataset_scope": "64 speeches from Simon Kennedy MP (2024-2025)",
+    "limitations": "Only retrieves Simon Kennedy's speeches. Speech IDs from other sources will fail."
+  },
+  "annotations": {
+    "readOnlyHint": true,
+    "idempotentHint": true,
+    "destructiveHint": false,
+    "openWorldHint": false
+  },
+  "icon": "📄",
+  "parameters": [
+    {
+      "name": "speech_id",
+      "type": "string",
+      "required": true,
+      "format": "UUID v4",
+      "description": "Unique identifier for the speech, obtained from search_hansard_speeches results",
+      "examples": [
+        "550e8400-e29b-41d4-a716-446655440000",
+        "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+      ],
+      "chatgpt_behavior": "GPT-5 extracts speech_id from search results, passes directly to fetch tool"
+    }
+  ],
+  "response_structure": {
+    "type": "object",
+    "properties": {
+      "speech_id": "UUID of the speech",
+      "title": "Speech title/subject",
+      "full_text": "Complete speech transcript (2000-10000 words)",
+      "speaker": "Name of MP/Senator (always 'Simon Kennedy' in this dataset)",
+      "party": "Political party (Liberal, Labor, Greens, National, Independent)",
+      "chamber": "House of Representatives | Senate",
+      "electorate": "Electorate name (House members only, null for Senators)",
+      "state": "NSW | VIC | QLD | WA | SA | TAS | ACT | NT",
+      "date": "ISO 8601 date (YYYY-MM-DD)",
+      "hansard_reference": "Official Hansard citation (e.g., 'House Hansard, 3 June 2024, p.245')",
+      "topic_tags": "Array of topic tags (e.g., ['housing', 'affordability', 'urban planning'])",
+      "word_count": "Total word count (computed from full_text)",
+      "content_hash": "SHA-256 hash of full_text (for deduplication)"
+    }
+  },
+  "usage_examples": [
+    {
+      "user_query": "Show me the full text of that speech",
+      "chatgpt_action": "Extracts speech_id from previous search results, invokes fetch_hansard_speech",
+      "expected_behavior": "No confirmation prompt, full text returned within 2s"
+    },
+    {
+      "user_query": "What's the complete transcript of speech 550e8400-e29b-41d4-a716-446655440000?",
+      "chatgpt_action": "Invokes fetch_hansard_speech with provided speech_id",
+      "expected_behavior": "Direct fetch using UUID, no search required"
+    },
+    {
+      "user_query": "Give me the full text of Simon Kennedy's speech on housing from June 2024",
+      "chatgpt_action": "First: search_hansard_speeches with query='housing', start_date='2024-06-01', end_date='2024-06-30'. Then: fetch_hansard_speech with speech_id from search results",
+      "expected_behavior": "Two-tool workflow: search → fetch"
+    }
+  ],
+  "deep_research_mode_behavior": {
+    "typical_workflow": "After search identifies 10+ relevant speeches, Deep Research Mode fetches full text of 3-5 most relevant speeches for detailed analysis",
+    "result_processing": "Extracts direct quotations, analyzes rhetorical patterns, generates citations with Hansard references",
+    "citation_format": "Uses hansard_reference field for proper attribution (e.g., 'According to Hansard (House Hansard, 3 June 2024, p.245), Simon Kennedy stated...')"
+  },
+  "error_handling": {
+    "speech_not_found": {
+      "error_type": "ValueError",
+      "message": "Speech not found: invalid-uuid",
+      "chatgpt_display": "Could not find speech with that ID. Please verify the speech_id from search results.",
+      "chatgpt_behavior": "Informs user, may re-run search to get correct speech_id"
+    },
+    "invalid_uuid_format": {
+      "error_type": "ValidationError",
+      "message": "speech_id must be a valid UUID",
+      "chatgpt_behavior": "GPT-5 rarely sends invalid UUIDs; validation prevents malformed requests"
+    }
+  },
+  "performance_targets": {
+    "response_time": "<2s (95% of requests)",
+    "cold_start": "15-30s (first request after idle), mitigated by Cloud Run min instances=1",
+    "confirmation_prompts": "0 (100% immediate execution due to readOnlyHint=true)",
+    "idempotent_behavior": "Same speech_id always returns identical result; safe for ChatGPT to cache"
+  },
+  "annotation_details": {
+    "readOnlyHint": {
+      "value": true,
+      "effect": "ChatGPT executes fetch without user confirmation prompt",
+      "rationale": "Fetching speech is safe read operation, no state changes"
+    },
+    "idempotentHint": {
+      "value": true,
+      "effect": "ChatGPT understands same speech_id always returns same result; may cache to reduce redundant calls",
+      "rationale": "Speeches are immutable; database updates don't change existing speech content",
+      "distinction_from_search": "Search tool does NOT have idempotentHint because results may change if database is updated with new speeches"
+    },
+    "destructiveHint": {
+      "value": false,
+      "effect": "Not applicable (no write operations)",
+      "rationale": "Fetch is read-only"
+    },
+    "openWorldHint": {
+      "value": false,
+      "effect": "ChatGPT understands results are from closed, bounded dataset (64 speeches)",
+      "rationale": "Not accessing external web resources; authoritative curated data"
+    }
+  },
+  "chatgpt_workflow_integration": {
+    "search_to_fetch_pattern": {
+      "step_1": "User asks about Simon Kennedy's speeches on a topic",
+      "step_2": "ChatGPT invokes search_hansard_speeches to find relevant speeches",
+      "step_3": "Search returns speech excerpts with speech_id values",
+      "step_4": "ChatGPT identifies most relevant speeches based on relevance_score",
+      "step_5": "ChatGPT invokes fetch_hansard_speech for top 1-3 speeches to get full text",
+      "step_6": "ChatGPT displays excerpts or generates summary with proper citations"
+    },
+    "direct_fetch_pattern": {
+      "step_1": "User provides speech_id (rare, but supported)",
+      "step_2": "ChatGPT invokes fetch_hansard_speech directly",
+      "step_3": "ChatGPT displays full text or answers specific question about speech"
+    }
+  },
+  "comparison_with_search_tool": {
+    "search_tool": {
+      "purpose": "Find relevant speeches using semantic vector search",
+      "returns": "Speech excerpts (500 chars) + metadata",
+      "typical_use": "Initial discovery, broad queries",
+      "idempotent": false,
+      "response_size": "Small (10 excerpts × 500 chars = ~5KB)"
+    },
+    "fetch_tool": {
+      "purpose": "Retrieve complete speech text by ID",
+      "returns": "Full transcript (2000-10000 words) + metadata",
+      "typical_use": "Detailed analysis, quotation, after search",
+      "idempotent": true,
+      "response_size": "Large (5000 words × 5 chars = ~25KB per speech)"
+    }
+  },
+  "implementation_reference": {
+    "source_file": "/home/user/skai-fastmcp-cloudrun/src/tools/fetch.py",
+    "function": "fetch_hansard_speech",
+    "metadata_dict": "FETCH_TOOL_METADATA",
+    "registration": "mcp.tool(name=FETCH_TOOL_METADATA['name'], annotations=FETCH_TOOL_METADATA['annotations'])(fetch_hansard_speech)",
+    "database_query": "await metadata_store.get_speech(speech_id) - single primary key lookup, <10ms"
+  }
+}
