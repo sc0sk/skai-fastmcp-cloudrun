@@ -69,21 +69,30 @@ async def main():
         database=os.getenv("CLOUDSQL_DATABASE", "hansard"),
     )
 
-    # 3. Initialize embeddings
+    # 3. Initialize table FIRST (before creating vector store)
+    print(f"\n📊 Creating hansard_speeches table...")
+    await engine.ainit_vectorstore_table(
+        table_name="hansard_speeches",
+        vector_size=768,  # text-embedding-005 dimension
+        overwrite_existing=True,  # Force fresh table
+    )
+    print(f"   ✅ Table created")
+
+    # 4. Initialize embeddings
     print(f"\n🤖 Initializing Vertex AI embeddings...")
     embeddings = VertexAIEmbeddings(
         model_name="text-embedding-005",
         project=os.getenv("GCP_PROJECT_ID", "skai-fastmcp-cloudrun"),
     )
 
-    # 4. Create vector store (uses existing table or creates new one)
+    # 5. Create vector store (uses the table we just created)
     print(f"\n📊 Initializing vector store...")
     vector_store = await PostgresVectorStore.create(
         engine=engine,
         table_name="hansard_speeches",
         embedding_service=embeddings,
     )
-    print(f"   ✅ Vector store ready: hansard_speeches")
+    print(f"   ✅ Vector store ready")
     print(f"   Schema: langchain_id, content, embedding, langchain_metadata")
 
     # 5. Initialize text splitter
