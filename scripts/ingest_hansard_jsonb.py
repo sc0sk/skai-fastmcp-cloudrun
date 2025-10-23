@@ -69,21 +69,28 @@ async def main():
         database=os.getenv("CLOUDSQL_DATABASE", "hansard"),
     )
 
-    # 3. Initialize embeddings
-    print(f"🤖 Initializing Vertex AI embeddings...")
+    # 3. Drop existing table (fresh schema)
+    print(f"\n🗑️  Dropping hansard_speeches table (if exists)...")
+    async with engine._pool.connect() as conn:
+        await conn.execute("DROP TABLE IF EXISTS hansard_speeches CASCADE")
+    print(f"   ✅ Dropped")
+
+    # 4. Initialize embeddings
+    print(f"\n🤖 Initializing Vertex AI embeddings...")
     embeddings = VertexAIEmbeddings(
         model_name="text-embedding-005",
         project=os.getenv("GCP_PROJECT_ID", "skai-fastmcp-cloudrun"),
     )
 
-    # 4. Create vector store (auto-creates table with default schema)
-    print(f"📊 Creating vector store...")
+    # 5. Create vector store (auto-creates table with default schema)
+    print(f"\n📊 Creating vector store...")
     vector_store = await PostgresVectorStore.create(
         engine=engine,
         table_name="hansard_speeches",
         embedding_service=embeddings,
     )
-    print(f"   Table: hansard_speeches (id, content, embedding, langchain_metadata)")
+    print(f"   ✅ Table created: hansard_speeches")
+    print(f"   Schema: langchain_id, content, embedding, langchain_metadata")
 
     # 5. Initialize text splitter
     print(f"✂️  Text splitter: 800 chars, 150 overlap")
