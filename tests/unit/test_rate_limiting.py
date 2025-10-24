@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from src.auth.rate_limiter import RateLimitBucket, RateLimitConfig, RateLimiter
+auth.rate_limiter import RateLimitBucket, RateLimitConfig, RateLimiter
 
 
 def test_rate_limit_blocks_11th_attempt():
@@ -70,7 +70,7 @@ def test_rate_limit_per_token_hash():
 
 def test_token_hashing_consistency():
     """Test that hash_token produces consistent hashes"""
-    from src.auth.base import hash_token
+    auth.base import hash_token
 
     token = "my_secret_token"
     hash1 = hash_token(token)

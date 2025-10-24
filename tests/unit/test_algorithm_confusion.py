@@ -7,7 +7,7 @@ Verifies JWT algorithm whitelisting and HMAC key strength validation.
 import pytest
 from pydantic import ValidationError
 
-from src.models.auth import JWTVerifierConfig
+models.auth import JWTVerifierConfig
 
 
 def test_jwks_rejects_hmac_algorithm():

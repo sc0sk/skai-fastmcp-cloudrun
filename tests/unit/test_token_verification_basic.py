@@ -13,7 +13,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa
 from pydantic import SecretStr, ValidationError
 
-from src.models.auth import JWTVerifierConfig, TokenClaims
+models.auth import JWTVerifierConfig, TokenClaims
 
 
 def test_jwt_clock_skew_constraint():

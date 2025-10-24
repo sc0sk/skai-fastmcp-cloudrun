@@ -7,9 +7,9 @@ from fastmcp import Context
 from pydantic import BaseModel, Field
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-from tools.ingest.markdown_parser import parse_markdown_file
-from tools.ingest.path_validator import validate_file_path
-from tools.ingest.auth import require_admin_role
+from tools.ingestion_utils.markdown_parser import parse_markdown_file
+from tools.ingestion_utils.path_validator import validate_file_path
+from tools.ingestion_utils.auth import require_admin_role
 from storage.metadata_store import MetadataStore
 from storage.vector_store import VectorStoreService
 from config import get_chunk_size, get_chunk_overlap

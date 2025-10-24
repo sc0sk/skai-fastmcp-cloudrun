@@ -9,7 +9,7 @@ import os
 import pytest
 from pydantic import ValidationError
 
-from src.models.auth import IntrospectionVerifierConfig, JWTVerifierConfig
+models.auth import IntrospectionVerifierConfig, JWTVerifierConfig
 
 
 def test_introspection_https_enforcement_production():

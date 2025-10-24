@@ -1,7 +1,7 @@
 """Unit tests for markdown parser."""
 import pytest
 from pathlib import Path
-from tools.ingest.markdown_parser import parse_markdown_file
+from tools.ingestion_utils.markdown_parser import parse_markdown_file
 from models.speech import SpeechFrontmatter
 
 

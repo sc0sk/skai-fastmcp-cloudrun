@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import date
 from fastmcp import Context
 
-from src.tools.ingest import ingest_hansard_speech
-from src.storage.vector_store import VectorStoreService
-from src.storage.metadata_store import MetadataStore
-from src.models.speech import SpeechMetadata
+tools.ingest import ingest_hansard_speech
+storage.vector_store import VectorStoreService
+storage.metadata_store import MetadataStore
+models.speech import SpeechMetadata
 
 
 @pytest.fixture
@@ -42,8 +42,8 @@ def sample_speech_data():
 async def test_ingest_with_progress_context(mock_context, sample_speech_data):
     """Verify progress reported at correct milestones when ctx provided."""
     # Mock the storage services
-    with patch('src.tools.ingest.get_default_metadata_store') as mock_metadata, \
-         patch('src.tools.ingest.get_default_vector_store') as mock_vector:
+    with patch('tools.ingestion_utils.get_default_metadata_store') as mock_metadata, \
+         patch('tools.ingestion_utils.get_default_vector_store') as mock_vector:
 
         # Setup mocks
         mock_metadata_store = AsyncMock()
@@ -83,8 +83,8 @@ async def test_ingest_with_progress_context(mock_context, sample_speech_data):
 async def test_ingest_without_progress_context(sample_speech_data):
     """Verify tool works correctly when ctx=None (backward compatibility)."""
     # Mock the storage services
-    with patch('src.tools.ingest.get_default_metadata_store') as mock_metadata, \
-         patch('src.tools.ingest.get_default_vector_store') as mock_vector:
+    with patch('tools.ingestion_utils.get_default_metadata_store') as mock_metadata, \
+         patch('tools.ingestion_utils.get_default_vector_store') as mock_vector:
 
         # Setup mocks
         mock_metadata_store = AsyncMock()
@@ -111,8 +111,8 @@ async def test_ingest_without_progress_context(sample_speech_data):
 async def test_progress_stages_reported(mock_context, sample_speech_data):
     """Verify all expected progress stages are reported."""
     # Mock the storage services
-    with patch('src.tools.ingest.get_default_metadata_store') as mock_metadata, \
-         patch('src.tools.ingest.get_default_vector_store') as mock_vector:
+    with patch('tools.ingestion_utils.get_default_metadata_store') as mock_metadata, \
+         patch('tools.ingestion_utils.get_default_vector_store') as mock_vector:
 
         # Setup mocks
         mock_metadata_store = AsyncMock()
@@ -147,8 +147,8 @@ async def test_progress_stages_reported(mock_context, sample_speech_data):
 async def test_final_progress_is_100(mock_context, sample_speech_data):
     """Verify 100% progress reported on successful completion."""
     # Mock the storage services
-    with patch('src.tools.ingest.get_default_metadata_store') as mock_metadata, \
-         patch('src.tools.ingest.get_default_vector_store') as mock_vector:
+    with patch('tools.ingestion_utils.get_default_metadata_store') as mock_metadata, \
+         patch('tools.ingestion_utils.get_default_vector_store') as mock_vector:
 
         # Setup mocks
         mock_metadata_store = AsyncMock()
@@ -197,8 +197,8 @@ async def test_progress_not_100_on_error(mock_context):
 async def test_vector_store_progress_frequency(mock_context):
     """Verify embedding stage reports progress at reasonable intervals."""
     # Create a real VectorStoreService instance with mocked internals
-    with patch('src.storage.vector_store.PostgresEngine') as mock_engine, \
-         patch('src.storage.vector_store.PostgresVectorStore') as mock_vs:
+    with patch('storage.vector_store.PostgresEngine') as mock_engine, \
+         patch('storage.vector_store.PostgresVectorStore') as mock_vs:
 
         # Mock vector store
         mock_vs_instance = AsyncMock()
@@ -269,8 +269,8 @@ async def test_metadata_store_progress():
 async def test_ingest_without_embeddings(mock_context, sample_speech_data):
     """Verify ingest works with generate_embeddings=False."""
     # Mock the storage services
-    with patch('src.tools.ingest.get_default_metadata_store') as mock_metadata, \
-         patch('src.tools.ingest.get_default_vector_store') as mock_vector:
+    with patch('tools.ingestion_utils.get_default_metadata_store') as mock_metadata, \
+         patch('tools.ingestion_utils.get_default_vector_store') as mock_vector:
 
         # Setup mocks
         mock_metadata_store = AsyncMock()
