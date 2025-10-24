@@ -1,6 +1,6 @@
 # Feature Specification: Fix Local Database Connection for Testing
 
-**Feature Branch**: `012-fix-local-database`  
+**Feature Branch**: `014-fix-local-database`  
 **Created**: 2025-10-25  
 **Status**: Draft  
 **Type**: Bug Fix  

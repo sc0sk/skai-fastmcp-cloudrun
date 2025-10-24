@@ -1,0 +1,219 @@
+# Tasks: Fix Local Database Connection for Testing
+
+**Feature**: 014-fix-local-database  
+**Created**: 2025-10-25  
+**Type**: Bug Fix
+
+## Task Summary
+
+- **Total Tasks**: 18
+- **Phases**: 4 (Setup, P1 Critical Fix, P2 Docs, P3 Automation)
+- **Estimated Time**: 2-3 hours
+
+---
+
+## Phase 0: Setup & Foundation (5 tasks)
+
+- [ ] **T001**: Create feature branch `014-fix-local-database`
+  - Verify branch created from main
+  - Confirm working directory clean
+
+- [ ] **T002**: Document current environment variable issue
+  - List all files using `CLOUDSQL_PASSWORD`
+  - List all files using `DATABASE_PASSWORD`
+  - Confirm mismatch in `.env` vs code
+
+- [ ] **T003**: Verify Cloud SQL proxy is installed
+  - Check if `cloud_sql_proxy` binary exists
+  - Test proxy can start (manual verification)
+  - Document version
+
+- [ ] **T004**: Create backup of current `.env`
+  - Copy `.env` to `.env.backup`
+  - Ensure backup is gitignored
+
+- [ ] **T005**: Identify all test files that need database
+  - List: `test_tools_direct.py`, `test_mcp_tools.py`, etc.
+  - Mark which tests require database connection
+
+---
+
+## Phase 1: Critical Environment Fix (P1 - 6 tasks)
+
+### T101-T103: Fix Environment Configuration
+
+- [ ] **T101**: Update `.env` file with correct variable name
+  - Rename `CLOUDSQL_PASSWORD` to `DATABASE_PASSWORD`
+  - Verify password value unchanged
+  - Add comments explaining local vs production auth
+
+- [ ] **T102**: Update `.env.example` with documentation
+  - Add `DATABASE_PASSWORD` example (placeholder value)
+  - Document: "For local testing with proxy - password auth"
+  - Document: "For production Cloud Run - omit for IAM auth"
+  - Add clear section headers for auth configuration
+
+- [ ] **T103**: Verify code uses correct variable name
+  - Check `src/storage/vector_store.py` line 53
+  - Check `src/storage/metadata_store.py` line 51
+  - Confirm both use `os.getenv("DATABASE_PASSWORD")`
+
+### T104-T106: Test Database Connection
+
+- [ ] **T104**: Start Cloud SQL proxy manually
+  - Run: `./cloud_sql_proxy skai-fastmcp-cloudrun:us-central1:hansard-db-v2`
+  - Verify proxy starts on port 5432
+  - Check proxy logs for successful connection
+
+- [ ] **T105**: Run `test_tools_direct.py` with proxy
+  - Execute: `PYTHONPATH=src:. .venv/bin/python test_tools_direct.py`
+  - Expected: All tests pass without "password authentication failed"
+  - Verify search returns results
+  - Verify fetch returns speech data
+
+- [ ] **T106**: Validate both vector_store and metadata_store connect
+  - Check connection logs from both stores
+  - Verify no authentication errors
+  - Confirm queries execute successfully
+
+---
+
+## Phase 2: Proxy Setup Script (P1 - 4 tasks)
+
+- [ ] **T201**: Create `scripts/start_cloud_sql_proxy.sh`
+  - Add shebang and error handling
+  - Check if proxy binary exists
+  - Check if proxy already running (via `ps` or pidfile)
+  - Parse arguments: `--port`, `--instance`
+  - Read from env vars if args not provided
+
+- [ ] **T202**: Implement proxy startup logic
+  - Construct connection string: `PROJECT:REGION:INSTANCE`
+  - Start proxy in background
+  - Save PID to `.cloud_sql_proxy.pid`
+  - Wait for proxy to be ready (test connection)
+  - Output success message with port info
+
+- [ ] **T203**: Add stop script `scripts/stop_cloud_sql_proxy.sh`
+  - Read PID from `.cloud_sql_proxy.pid`
+  - Send SIGTERM to process
+  - Wait for clean shutdown
+  - Remove PID file
+
+- [ ] **T204**: Test proxy scripts
+  - Test start script: `./scripts/start_cloud_sql_proxy.sh`
+  - Verify proxy running via `ps`
+  - Run database test to confirm connection
+  - Test stop script: `./scripts/stop_cloud_sql_proxy.sh`
+  - Verify proxy stopped cleanly
+
+---
+
+## Phase 3: Documentation Updates (P2 - 3 tasks)
+
+- [ ] **T301**: Update `README.md` with local setup section
+  - Add "Local Development Setup" heading
+  - Document: Install Cloud SQL proxy
+  - Document: Configure `.env` with DATABASE_PASSWORD
+  - Document: Start proxy with script
+  - Document: Run tests
+  - Add troubleshooting subsection
+
+- [ ] **T302**: Update `DATABASE_SETUP.md` with proxy instructions
+  - Add section: "Local Testing with Cloud SQL Proxy"
+  - Step-by-step proxy installation (macOS, Linux, Windows)
+  - Configuration examples for both auth methods
+  - Common errors and solutions
+
+- [ ] **T303**: Add inline comments to storage files
+  - Add comment in `vector_store.py` explaining DATABASE_PASSWORD
+  - Add comment in `metadata_store.py` explaining DATABASE_PASSWORD
+  - Link to DATABASE_SETUP.md in comments
+
+---
+
+## Phase 4: Validation & Cleanup (4 tasks)
+
+- [ ] **T401**: Run full test suite with proxy
+  - Start proxy via script
+  - Run all database-dependent tests
+  - Verify zero authentication errors
+  - Check test coverage maintained
+
+- [ ] **T402**: Test on fresh environment simulation
+  - Create new Python venv
+  - Install dependencies
+  - Configure `.env` from `.env.example`
+  - Follow README setup instructions
+  - Measure time to first successful test
+
+- [ ] **T403**: Update agent context file
+  - Update `.github/copilot-instructions.md`
+  - Add: "Local testing requires Cloud SQL proxy"
+  - Add: "Use DATABASE_PASSWORD for local auth"
+  - Document proxy script usage
+
+- [ ] **T404**: Clean up and commit changes
+  - Remove `.env.backup`
+  - Add `.cloud_sql_proxy.pid` to `.gitignore`
+  - Stage all changes
+  - Commit: "fix: standardize DATABASE_PASSWORD for local testing"
+  - Push to branch
+
+---
+
+## Phase 5 (Optional): Automated Proxy Management (P3 - deferred)
+
+- [ ] **T501**: Create pytest fixture for proxy auto-start
+  - Add `tests/conftest.py` if not exists
+  - Create `@pytest.fixture(scope="session")` for proxy
+  - Check if proxy running, start if needed
+  - Yield to tests
+  - Stop proxy after all tests
+
+- [ ] **T502**: Test automated proxy management
+  - Run tests without manually starting proxy
+  - Verify proxy auto-starts
+  - Verify tests pass
+  - Verify proxy auto-stops
+
+---
+
+## Success Criteria Mapping
+
+- **SC-001**: All existing test files pass ✓ (T105, T401)
+- **SC-002**: Setup time <5 minutes ✓ (T402)
+- **SC-003**: Zero password auth errors ✓ (T106, T401)
+- **SC-004**: Documentation with examples ✓ (T301, T302)
+
+## Testing Strategy
+
+### Before Implementation
+- [x] Document current failure mode (T002)
+- [ ] Verify proxy works manually (T104)
+
+### During Implementation
+- [ ] Test each change incrementally (T105, T106)
+- [ ] Verify scripts work (T204)
+
+### After Implementation
+- [ ] Full test suite passes (T401)
+- [ ] Fresh setup test (T402)
+
+## Dependencies
+
+**Sequential Dependencies**:
+- T101-T103 must complete before T104-T106
+- T104 must complete before T105
+- T201-T203 must complete before T204
+
+**Parallel Opportunities**:
+- T301-T303 can run in parallel [P]
+- Documentation work independent of code changes
+
+## Notes
+
+- **Quick Win**: T101-T106 can be completed in 30 minutes
+- **Priority**: Focus on Phase 0-1 first (critical path)
+- **Phase 2**: Nice to have but not blocking
+- **Phase 5**: Defer to future PR if time constrained
