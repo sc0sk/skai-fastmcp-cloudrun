@@ -1,0 +1,273 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "Bulk Markdown Directory Ingestion MCP Tool",
+  "description": "MCP tool contract for bulk directory ingestion with progress reporting and error isolation",
+  "tools": [
+    {
+      "name": "ingest_markdown_directory",
+      "description": "Ingest all markdown files from a directory with progress reporting and error isolation. Processes files sequentially, reports progress after each file, isolates errors so one failure doesn't stop the batch, and returns detailed summary with success/failure counts. Builds on Feature 012's single-file ingestion. Requires admin authentication.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "directory_path": {
+            "type": "string",
+            "description": "Absolute or relative path to directory containing markdown files",
+            "examples": ["/data/hansard_converted", "./speeches", "data/bulk_import"]
+          },
+          "pattern": {
+            "type": "string",
+            "description": "Glob pattern for file filtering (e.g., '*.md', 'hansard-*.md', 'speech-*.md')",
+            "default": "*.md",
+            "examples": ["*.md", "hansard-*.md", "2024-*.md", "speech-*.md"]
+          },
+          "max_files": {
+            "type": "integer",
+            "description": "Maximum number of files to process (safety limit to prevent accidental processing of thousands of files)",
+            "default": 100,
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "duplicate_policy": {
+            "type": "string",
+            "description": "How to handle duplicate speech_ids: 'skip' (default), 'update', or 'error'",
+            "enum": ["skip", "update", "error"],
+            "default": "skip"
+          },
+          "validate_path": {
+            "type": "boolean",
+            "description": "Whether to validate file paths for security (prevent directory traversal attacks)",
+            "default": true
+          }
+        },
+        "required": ["directory_path"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "Overall batch status",
+            "enum": ["complete", "partial", "failed"]
+          },
+          "summary": {
+            "type": "object",
+            "description": "Aggregate statistics for the batch",
+            "properties": {
+              "total_files": {
+                "type": "integer",
+                "description": "Total number of files discovered"
+              },
+              "succeeded": {
+                "type": "integer",
+                "description": "Number of files successfully ingested"
+              },
+              "skipped": {
+                "type": "integer",
+                "description": "Number of files skipped (duplicates with skip policy)"
+              },
+              "failed": {
+                "type": "integer",
+                "description": "Number of files that failed to ingest"
+              },
+              "total_chunks_created": {
+                "type": "integer",
+                "description": "Total vector chunks created across all successfully ingested files"
+              }
+            },
+            "required": ["total_files", "succeeded", "skipped", "failed", "total_chunks_created"]
+          },
+          "successful_files": {
+            "type": "array",
+            "description": "Details of successfully ingested files",
+            "items": {
+              "type": "object",
+              "properties": {
+                "file_name": {
+                  "type": "string",
+                  "description": "Name of the processed file"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": ["success", "skipped"]
+                },
+                "speech_id": {
+                  "type": "string",
+                  "description": "Speech ID from frontmatter"
+                },
+                "chunks_created": {
+                  "type": "integer",
+                  "description": "Number of vector chunks created (0 if skipped)"
+                }
+              },
+              "required": ["file_name", "status", "speech_id", "chunks_created"]
+            }
+          },
+          "failed_files": {
+            "type": "array",
+            "description": "Details of failed files with error information",
+            "items": {
+              "type": "object",
+              "properties": {
+                "file_name": {
+                  "type": "string",
+                  "description": "Name of the file that failed"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": ["failed"]
+                },
+                "error_type": {
+                  "type": "string",
+                  "description": "Type of exception (e.g., 'ValueError', 'FileNotFoundError', 'YAMLError')"
+                },
+                "error_message": {
+                  "type": "string",
+                  "description": "Detailed error message explaining the failure"
+                }
+              },
+              "required": ["file_name", "status", "error_type", "error_message"]
+            }
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable summary message (e.g., 'Processed 64 files: 60 succeeded, 2 skipped, 2 failed')"
+          }
+        },
+        "required": ["status", "summary", "successful_files", "failed_files", "message"]
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "requiresAuth": true,
+        "requiredRole": "admin",
+        "progressReporting": true,
+        "errorIsolation": true
+      },
+      "errors": [
+        {
+          "type": "PermissionError",
+          "description": "User does not have admin role"
+        },
+        {
+          "type": "FileNotFoundError",
+          "description": "Directory not found or not accessible"
+        },
+        {
+          "type": "ValueError",
+          "description": "Invalid parameters (bad pattern, exceeded max_files limit, directory path is not a directory)"
+        },
+        {
+          "type": "ToolError",
+          "description": "General tool execution error"
+        }
+      ],
+      "examples": [
+        {
+          "name": "Ingest all markdown files from converted directory",
+          "input": {
+            "directory_path": "/data/hansard_converted",
+            "pattern": "*.md",
+            "max_files": 100,
+            "duplicate_policy": "skip"
+          },
+          "output": {
+            "status": "complete",
+            "summary": {
+              "total_files": 64,
+              "succeeded": 64,
+              "skipped": 0,
+              "failed": 0,
+              "total_chunks_created": 768
+            },
+            "successful_files": [
+              {
+                "file_name": "hansard-reps-2024-001.md",
+                "status": "success",
+                "speech_id": "hansard-reps-2024-001",
+                "chunks_created": 12
+              }
+            ],
+            "failed_files": [],
+            "message": "Processed 64 files: 64 succeeded, 0 failed"
+          }
+        },
+        {
+          "name": "Ingest with pattern filter and mixed results",
+          "input": {
+            "directory_path": "./data/speeches",
+            "pattern": "speech-*.md",
+            "max_files": 50,
+            "duplicate_policy": "skip"
+          },
+          "output": {
+            "status": "complete",
+            "summary": {
+              "total_files": 10,
+              "succeeded": 7,
+              "skipped": 1,
+              "failed": 2,
+              "total_chunks_created": 84
+            },
+            "successful_files": [
+              {
+                "file_name": "speech-001.md",
+                "status": "success",
+                "speech_id": "hansard-reps-2024-001",
+                "chunks_created": 12
+              }
+            ],
+            "failed_files": [
+              {
+                "file_name": "speech-bad-yaml.md",
+                "status": "failed",
+                "error_type": "YAMLError",
+                "error_message": "Invalid YAML syntax at line 5: mapping values are not allowed here"
+              },
+              {
+                "file_name": "speech-missing-date.md",
+                "status": "failed",
+                "error_type": "ValueError",
+                "error_message": "Missing required field: date"
+              }
+            ],
+            "message": "Processed 10 files: 7 succeeded, 1 skipped, 2 failed"
+          }
+        }
+      ],
+      "usageGuidelines": {
+        "whenToUse": [
+          "Administrator needs to import multiple markdown files at once",
+          "Batch processing of converted Hansard speeches",
+          "Initial data migration of 50-200 files",
+          "Re-ingesting updated speeches with duplicate_policy='update'"
+        ],
+        "whenNotToUse": [
+          "Single file import (use ingest_markdown_file instead)",
+          "Real-time file watching (not supported)",
+          "Recursive directory traversal (only processes files in specified directory)",
+          "Parallel processing (sequential only)"
+        ],
+        "bestPractices": [
+          "Start with small batches (10-20 files) to verify format",
+          "Use pattern filtering to target specific files",
+          "Set appropriate max_files limit for your batch size",
+          "Use duplicate_policy='skip' for idempotent operations",
+          "Monitor progress updates for large batches",
+          "Review failed_files list to fix problematic files"
+        ]
+      },
+      "performanceCharacteristics": {
+        "throughput": "10+ files per minute (sequential processing)",
+        "latency": "5-10 seconds per file (parsing + embedding + storage)",
+        "scalability": "Supports up to 1000 files with max_files override",
+        "progressReporting": "Updates after each file (every 1-5 files for large batches)"
+      },
+      "securityConsiderations": {
+        "authentication": "Requires admin bearer token (OAuth 2.1)",
+        "authorization": "Admin role required (same as Feature 012)",
+        "pathValidation": "Prevents directory traversal attacks",
+        "resourceLimits": "max_files parameter prevents resource exhaustion",
+        "auditLogging": "All ingestion operations logged with admin identity"
+      }
+    }
+  ]
+}

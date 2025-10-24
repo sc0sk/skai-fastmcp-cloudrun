@@ -1,0 +1,80 @@
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+coverage/
+
+# Development files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation and specs
+README.md
+docs/
+specs/
+spec-kit/
+*.md
+!CLAUDE.md
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Test files
+tests/
+*.test.py
+test_*.py
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Cloud SQL Proxy (local only)
+cloud_sql_proxy
+
+# Temporary files
+*.tmp
+*.bak
+.cache/
+
+# Database files (local only)
+*.db
+*.sqlite
+*.sqlite3
+
+# Secrets
+*.pem
+*.key
+credentials.json
+service-account-key.json
+*-key.json
+
+# CI/CD
+.github/
+cloudbuild.yaml

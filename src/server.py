@@ -66,6 +66,7 @@ from tools.search import search_hansard_speeches, SEARCH_TOOL_METADATA
 from tools.fetch import fetch_hansard_speech, FETCH_TOOL_METADATA
 from tools.ingest import ingest_hansard_speech, INGEST_TOOL_METADATA
 from tools.ingest_markdown_file import ingest_markdown_file
+from tools.ingest_markdown_directory import ingest_markdown_directory
 
 # GitHub OAuth configuration
 # See: https://docs.fastmcp.com/servers/auth/github
@@ -136,12 +137,24 @@ mcp.tool(
     }
 )(ingest_markdown_file)
 
+# Register bulk markdown directory ingestion tool (admin-only)
+mcp.tool(
+    name="ingest_markdown_directory",
+    exclude_args=["ctx"],
+    annotations={
+        "destructiveHint": True,  # Write operation
+        "requiresAuth": True,  # Admin authentication required
+        "requiredRole": "admin"
+    }
+)(ingest_markdown_directory)
+
 # Print startup message
 print("✅ Hansard MCP Server initialized with ChatGPT Developer Mode enhancements")
 print("   🔍 search_hansard_speeches [read-only]")
 print("   📄 fetch_hansard_speech [read-only]")
 print("   📝 ingest_hansard_speech [write operation with progress reporting]")
 print("   📂 ingest_markdown_file [admin-only markdown ingestion]")
+print("   📁 ingest_markdown_directory [admin-only bulk directory ingestion]")
 
 # Expose ASGI app for uvicorn (Cloud Run deployment)
 # FastMCP's http_app() method returns the Starlette ASGI application
