@@ -6,9 +6,9 @@
 
 ## Task Summary
 
-- **Total Tasks**: 18
+- **Total Tasks**: 20
 - **Phases**: 4 (Setup, P1 Critical Fix, P2 Docs, P3 Automation)
-- **Estimated Time**: 2-3 hours
+- **Estimated Time**: 3-4 hours
 
 ---
 
@@ -38,7 +38,7 @@
 
 ---
 
-## Phase 1: Critical Environment Fix (P1 - 6 tasks)
+## Phase 1: Critical Environment Fix (P1 - 7 tasks)
 
 ### T101-T103: Fix Environment Configuration
 
@@ -76,13 +76,20 @@
   - Verify no authentication errors
   - Confirm queries execute successfully
 
+- [ ] **T107**: Improve error messages for authentication failures
+  - Update `src/storage/vector_store.py` error handling
+  - Update `src/storage/metadata_store.py` error handling
+  - Distinguish between: proxy not running, wrong credentials, network issues
+  - Add helpful hints in error messages pointing to setup docs
+
 ---
 
-## Phase 2: Proxy Setup Script (P1 - 4 tasks)
+## Phase 2: Proxy Setup Script (P1 - 5 tasks)
 
 - [ ] **T201**: Create `scripts/start_cloud_sql_proxy.sh`
   - Add shebang and error handling
-  - Check if proxy binary exists
+  - Check if Cloud SQL Auth Proxy binary exists in PATH or current directory
+  - If binary not found: Display installation instructions URL and exit with code 1
   - Check if proxy already running (via `ps` or pidfile)
   - Parse arguments: `--port`, `--instance`
   - Read from env vars if args not provided
@@ -106,6 +113,13 @@
   - Run database test to confirm connection
   - Test stop script: `./scripts/stop_cloud_sql_proxy.sh`
   - Verify proxy stopped cleanly
+
+- [ ] **T205**: Add port conflict detection and handling
+  - Check if port 5432 is already in use before starting proxy
+  - If occupied, try alternative ports (5433, 5434, 5435)
+  - Update connection string to use selected port
+  - Display warning message showing which port was selected
+  - Document port override via `--port` flag in script help
 
 ---
 
@@ -185,6 +199,14 @@
 - **SC-002**: Setup time <5 minutes ✓ (T402)
 - **SC-003**: Zero password auth errors ✓ (T106, T401)
 - **SC-004**: Documentation with examples ✓ (T301, T302)
+
+## Functional Requirements Mapping
+
+- **FR-001**: DATABASE_PASSWORD consistency ✓ (T101, T103)
+- **FR-002**: Support both auth modes ✓ (T101, T102, T301, T302)
+- **FR-003**: Verify proxy installed ✓ (T003, T201)
+- **FR-004**: Clear documentation ✓ (T102, T301, T302, T303)
+- **FR-005**: Enhanced error messages ✓ (T107)
 
 ## Testing Strategy
 

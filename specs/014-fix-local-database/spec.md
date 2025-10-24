@@ -102,6 +102,6 @@ Additionally, developers need clear guidance on:
 ### Measurable Outcomes
 
 - **SC-001**: All existing test files (`test_tools_direct.py`, `test_mcp_tools.py`) pass successfully when run locally with proxy
-- **SC-002**: Setup time for new developers reduces from >30 minutes to <5 minutes
+- **SC-002**: Setup time for new developers (from fresh checkout to first passing test, including proxy installation and configuration) reduces from >30 minutes to <5 minutes
 - **SC-003**: Zero "password authentication failed" errors when proxy is correctly configured
 - **SC-004**: Documentation includes working examples for both local and production auth configurations
