@@ -1,0 +1,105 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schemas/2024-11-05/tool-schema.json",
+  "tools": [
+    {
+      "name": "ingest_markdown_file",
+      "description": "Import a single parliamentary speech from a markdown file with YAML frontmatter. Admin-only operation.\n\nThis tool parses the markdown file, extracts metadata from YAML frontmatter, validates all required fields, generates vector embeddings via Vertex AI, and stores everything in the database. The operation is transactional - either all data is stored or nothing (rollback on error).\n\nRequired metadata in frontmatter:\n- speech_id: Unique identifier\n- speaker: Speaker name\n- party: Political party (Liberal, Labor, Greens, National, Independent)\n- chamber: Parliamentary chamber (REPS or SENATE)\n- date: Speech date (YYYY-MM-DD)\n- title: Speech title\n\nOptional metadata:\n- state: Electoral state (NSW, VIC, QLD, etc.)\n- hansard_reference: Official Hansard reference\n\nSecurity: Requires admin bearer token. File path is validated to prevent directory traversal attacks.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "Path to markdown file with YAML frontmatter. Can be absolute or relative. Will be validated against allowed base directory."
+          },
+          "duplicate_policy": {
+            "type": "string",
+            "enum": ["skip", "update", "error"],
+            "default": "skip",
+            "description": "How to handle duplicate speech_id. 'skip' ignores duplicates, 'update' overwrites existing, 'error' fails on duplicate."
+          },
+          "validate_path": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to validate file path is within allowed directory (security check)."
+          }
+        },
+        "required": ["file_path"]
+      },
+      "readOnlyHint": false,
+      "metadata": {
+        "tags": ["admin-only", "write", "ingestion"],
+        "requiresAuth": true,
+        "requiredRole": "admin"
+      }
+    },
+    {
+      "name": "ingest_markdown_bulk",
+      "description": "Import multiple parliamentary speeches from a directory of markdown files. Admin-only operation with progress reporting.\n\nThis tool processes all markdown files in a directory (optionally filtered by pattern), parsing frontmatter, validating metadata, generating embeddings, and storing in the database. Each file is processed in its own transaction - failures are isolated and don't affect other files.\n\nProgress is reported after each file for long-running operations. A summary report is returned with success/failure counts and detailed error messages for any failed files.\n\nFile processing:\n1. Discover files matching pattern in directory\n2. For each file:\n   - Parse and validate\n   - Generate embeddings\n   - Store in database (transactional)\n   - Report progress\n3. Return summary with successes, failures, and error details\n\nSecurity: Requires admin bearer token. Directory path is validated to prevent directory traversal.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "directory_path": {
+            "type": "string",
+            "description": "Path to directory containing markdown files. Will be validated against allowed base directory."
+          },
+          "file_pattern": {
+            "type": "string",
+            "default": "*.md",
+            "description": "Glob pattern to filter files (e.g., '*.md', 'speech_*.md'). Defaults to all .md files."
+          },
+          "duplicate_policy": {
+            "type": "string",
+            "enum": ["skip", "update", "error"],
+            "default": "skip",
+            "description": "How to handle duplicate speech_id across all files."
+          },
+          "validate_paths": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to validate all file paths are within allowed directory."
+          },
+          "max_files": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 100,
+            "description": "Maximum number of files to process. Safety limit to prevent runaway operations."
+          }
+        },
+        "required": ["directory_path"]
+      },
+      "readOnlyHint": false,
+      "metadata": {
+        "tags": ["admin-only", "write", "ingestion", "bulk"],
+        "requiresAuth": true,
+        "requiredRole": "admin",
+        "supportsProgress": true
+      }
+    },
+    {
+      "name": "validate_markdown_file",
+      "description": "Validate a markdown file's frontmatter and structure without importing. Admin-only dry-run operation.\n\nThis tool performs all validation checks that would be done during ingestion but doesn't actually store anything in the database. Useful for:\n- Testing markdown files before bulk import\n- Debugging frontmatter issues\n- Verifying file format compliance\n\nValidation checks:\n1. File exists and is readable\n2. Path is within allowed directory\n3. File is valid UTF-8\n4. YAML frontmatter is well-formed\n5. All required metadata fields are present\n6. Metadata values match expected formats/enums\n7. Speech ID is unique (checks database)\n8. Content is not empty\n\nReturns detailed validation report with pass/fail for each check and specific error messages for failures.\n\nSecurity: Requires admin bearer token. Read-only operation.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "Path to markdown file to validate."
+          },
+          "check_duplicate": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to check if speech_id already exists in database."
+          }
+        },
+        "required": ["file_path"]
+      },
+      "readOnlyHint": true,
+      "metadata": {
+        "tags": ["admin-only", "read", "validation"],
+        "requiresAuth": true,
+        "requiredRole": "admin"
+      }
+    }
+  ]
+}

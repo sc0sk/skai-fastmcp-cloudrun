@@ -24,9 +24,9 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11+ (Cloud Run compatibility): Follow standard conventions
 
 ## Recent Changes
+- 012-admin-markdown-ingestion: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 - 011-mcp-oauth21-security: Added Python 3.11+ (Cloud Run compatibility)
 - 010-token-verification: Added Python 3.11+ (Cloud Run compatibility requirement) + PyJWT (JWT validation), cryptography (RSA/ECDSA keys), httpx (HTTP introspection), Pydantic v2 (schemas), FastMCP 2.12.0+ (auth provider framework)
-- 005-chatgpt-integration: Added Python 3.11+ + FastMCP 2.12.5+ (existing), no new dependencies required
 
 <!-- MANUAL ADDITIONS START -->
 

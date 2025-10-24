@@ -6,7 +6,7 @@ Verifies no plaintext tokens appear in logs.
 
 import pytest
 
-from src.auth.base import hash_token
+auth.base import hash_token
 
 
 def test_hash_token_same_input_same_output():
