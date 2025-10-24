@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from google.cloud.sql.connector import Connector
 from dotenv import load_dotenv
 from fastmcp import Context
+from config import METADATA_TABLE_NAME
 
 from src.models.speech import SpeechMetadata
 
@@ -133,7 +134,7 @@ class MetadataStore:
 
             # Check for duplicate via content_hash
             existing = await conn.fetchval(
-                "SELECT speech_id FROM speeches WHERE content_hash = $1",
+                f"SELECT speech_id FROM {METADATA_TABLE_NAME} WHERE content_hash = $1",
                 speech.content_hash,
             )
 
@@ -144,8 +145,8 @@ class MetadataStore:
 
             # Insert new speech
             speech_id = await conn.fetchval(
-                """
-                INSERT INTO speeches (
+                f"""
+                INSERT INTO {METADATA_TABLE_NAME} (
                     title, full_text, speaker, party, chamber,
                     electorate, state, date, hansard_reference,
                     word_count, content_hash, topic_tags
@@ -194,7 +195,7 @@ class MetadataStore:
 
         try:
             row = await conn.fetchrow(
-                "SELECT * FROM speeches WHERE speech_id = $1",
+                f"SELECT * FROM {METADATA_TABLE_NAME} WHERE speech_id = $1",
                 speech_id,
             )
 
@@ -316,7 +317,7 @@ class MetadataStore:
 
         try:
             result = await conn.execute(
-                "DELETE FROM speeches WHERE speech_id = $1",
+                f"DELETE FROM {METADATA_TABLE_NAME} WHERE speech_id = $1",
                 speech_id,
             )
 
@@ -343,23 +344,23 @@ class MetadataStore:
 
         try:
             # Speech count
-            speech_count = await conn.fetchval("SELECT COUNT(*) FROM speeches")
+            speech_count = await conn.fetchval(f"SELECT COUNT(*) FROM {METADATA_TABLE_NAME}")
 
             # Unique speakers
             unique_speakers = await conn.fetchval(
-                "SELECT COUNT(DISTINCT speaker) FROM speeches"
+                f"SELECT COUNT(DISTINCT speaker) FROM {METADATA_TABLE_NAME}"
             )
 
             # Date range
             date_range = await conn.fetchrow(
-                "SELECT MIN(date) as earliest, MAX(date) as latest FROM speeches"
+                f"SELECT MIN(date) as earliest, MAX(date) as latest FROM {METADATA_TABLE_NAME}"
             )
 
             # Party breakdown
             party_breakdown = await conn.fetch(
-                """
+                f"""
                 SELECT party, COUNT(*) as count
-                FROM speeches
+                FROM {METADATA_TABLE_NAME}
                 GROUP BY party
                 ORDER BY count DESC
                 """

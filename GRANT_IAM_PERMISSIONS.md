@@ -1,93 +1,64 @@
-# Granting IAM Database Permissions to Cloud Run Service Account
+# Grant IAM Database Permissions
 
-## Overview
-The Cloud Run service needs database-level permissions to access Cloud SQL PostgreSQL using IAM authentication.
+## Summary
 
-## Current Status
-- ✅ IAM database user created: `666924716777-compute@developer`
-- ✅ Cloud Run service account: `666924716777-compute@developer.gserviceaccount.com`
-- ✅ Cloud Run has `roles/cloudsql.client` IAM role
-- ❌ **Pending:** Database-level GRANT permissions
+IAM user `666924716777-compute@developer` has been created in Cloud SQL successfully. Now database-level permissions need to be granted through the Cloud Console SQL Editor.
 
-## Instructions for Cloud Shell
+## What Was Done
 
-### Step 1: Open Cloud Shell
-Go to: https://console.cloud.google.com/?cloudshell=true
+1. ✅ Created IAM database user: `666924716777-compute@developer`  
+   ```bash
+   gcloud sql users create "666924716777-compute@developer" --instance=hansard-db-v2 --type=CLOUD_IAM_SERVICE_ACCOUNT --project=skai-fastmcp-cloudrun
+   ```
 
-### Step 2: Set Project
-```bash
-gcloud config set project skai-fastmcp-cloudrun
-```
+2. ✅ Cloud Run service account already has Cloud SQL Client role (`roles/cloudsql.client`)
 
-### Step 3: Download and Start Cloud SQL Proxy
-```bash
-# Download proxy
-curl -o cloud_sql_proxy https://dl.google.com/cloudsql/cloud_sql_proxy.linux.amd64
-chmod +x cloud_sql_proxy
+## What You Need to Do
 
-# Start proxy (handles SSL automatically)
-./cloud_sql_proxy -instances=skai-fastmcp-cloudrun:us-central1:hansard-db=tcp:5432 &
+Execute the SQL commands in `grant_iam_db_permissions.sql` via Cloud Console:
 
-# Wait for proxy to connect
-sleep 10
-```
-
-### Step 4: Connect to Database
-```bash
-# Password: k6K5Za0cfzfjV7q5iRcOLm43
-PGPASSWORD='k6K5Za0cfzfjV7q5iRcOLm43' psql -h 127.0.0.1 -p 5432 -U postgres -d hansard
-```
-
-### Step 5: Grant IAM Permissions
-Once connected to psql, run these SQL commands:
+1. Go to Cloud SQL Console: https://console.cloud.google.com/sql/instances/hansard-db-v2/overview?project=skai-fastmcp-cloudrun
+2. Click "Open Cloud Shell Editor" or use the SQL editor
+3. Connect to database "hansard"
+4. Run these commands:
 
 ```sql
--- Grant connection permission
-GRANT CONNECT ON DATABASE hansard TO "666924716777-compute@developer";
-
--- Grant schema usage
+-- Grant USAGE on schema
 GRANT USAGE ON SCHEMA public TO "666924716777-compute@developer";
 
--- Grant table permissions (SELECT, INSERT, UPDATE, DELETE)
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "666924716777-compute@developer";
+-- Grant SELECT, INSERT, UPDATE on hansard_speeches table
+GRANT SELECT, INSERT, UPDATE ON TABLE hansard_speeches TO "666924716777-compute@developer";
 
--- Grant sequence permissions (for auto-increment columns)
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "666924716777-compute@developer";
+-- Grant USAGE on sequences
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO "666924716777-compute@developer";
 
--- Grant default privileges for future tables
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "666924716777-compute@developer";
-
--- Grant default privileges for future sequences
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO "666924716777-compute@developer";
-
--- Exit psql
-\q
+-- Change table owner (allows LangChain to manage the table)
+ALTER TABLE hansard_speeches OWNER TO "666924716777-compute@developer";
 ```
 
-### Step 6: Verify and Test
-After granting permissions, the MCP search and fetch tools should work with IAM authentication.
+## Verification
 
-Test via MCP Inspector or check Cloud Run logs for successful database connections.
+After running the SQL commands, test the IAM connection:
 
-## Current Cloud Run Configuration
-- **Service:** hansard-mcp-server
-- **Region:** us-central1
-- **Current Revision:** hansard-mcp-server-00023-lfm
-- **Authentication:** IAM (no user/password environment variables)
+```bash
+PYTHONPATH=src GCP_PROJECT_ID=skai-fastmcp-cloudrun GCP_REGION=us-central1 CLOUDSQL_INSTANCE=hansard-db-v2 CLOUDSQL_DATABASE=hansard uv run python3 scripts/init_langchain_schema.py
+```
+
+This should connect successfully using IAM authentication (no password needed).
+
+## Next Steps
+
+Once IAM permissions are verified:
+
+1. Populate database with Hansard speeches:
+   ```bash
+   PYTHONPATH=src GCP_PROJECT_ID=skai-fastmcp-cloudrun GCP_REGION=us-central1 CLOUDSQL_INSTANCE=hansard-db-v2 CLOUDSQL_DATABASE=hansard uv run python3 scripts/populate_hansard_speeches.py
+   ```
+
+2. Test search functionality via MCP Inspector
 
 ## Troubleshooting
 
-### If psql connection fails with SSL errors:
-The Cloud SQL Proxy method above handles SSL automatically. If you see SSL errors, ensure:
-1. Cloud SQL Proxy is running (check with `ps aux | grep cloud_sql_proxy`)
-2. You're connecting to `127.0.0.1:5432` (not the Cloud SQL public IP)
-
-### If GRANT commands fail:
-Ensure you're connected as `postgres` user (which has superuser privileges).
-
-### After granting permissions:
-The MCP server will automatically use IAM authentication. No code changes or redeployment needed.
-
-## References
-- Official LangChain docs: https://python.langchain.com/docs/integrations/vectorstores/google_cloud_sql_pg/
-- Cloud SQL IAM authentication: https://cloud.google.com/sql/docs/postgres/authentication
+- If you see "password authentication failed", IAM permissions are not set up correctly
+- Ensure you're connected to the "hansard" database (not "postgres")
+- The IAM user format must be `service-account-name@developer` (without `.gserviceaccount.com`)

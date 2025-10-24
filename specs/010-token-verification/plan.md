@@ -124,8 +124,78 @@ tests/
 
 *Fill ONLY if Constitution Check has violations that must be justified*
 
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+**No violations requiring justification** - The authentication deviation (Principle II) is justified above in the Constitution Check section.
+
+## Phase 0: Research (Completed)
+
+✅ **research.md** - Comprehensive research on:
+- JWT validation libraries (PyJWT selected)
+- Token introspection protocols (httpx + RFC 7662)
+- JWKS key caching strategies (time-based cache with stale-while-revalidate)
+- Clock skew tolerance (60-second default)
+- HMAC key length requirements (32/48/64 bytes by algorithm)
+- Error handling patterns (401 validation vs 500 system errors)
+- Development testing utilities (StaticTokenVerifier, RSAKeyPair)
+- Environment-based configuration (FASTMCP_SERVER_AUTH_* prefix)
+- Security best practices and OWASP compliance
+- Performance benchmarks and optimization strategies
+
+All technical unknowns resolved. No blockers for implementation.
+
+## Phase 1: Design & Contracts (Completed)
+
+✅ **data-model.md** - Pydantic v2 data models:
+- `TokenClaims` - Validated token claims with scope checking methods
+- `ValidationResult` - Success/failure result with error categorization
+- `JWTVerifierConfig` - JWT verification configuration with HMAC key validation
+- `IntrospectionVerifierConfig` - OAuth 2.0 introspection configuration
+- `StaticTokenVerifierConfig` - Development-only static token mapping
+- `TokenVerifier` - Abstract base class for all verifier implementations
+- `RSAKeyPair` - Test key generation utility
+
+✅ **quickstart.md** - Five deployment scenarios:
+1. Production JWT with JWKS endpoints (Okta, Auth0, Azure AD, Google)
+2. HMAC symmetric keys (internal microservices)
+3. Static public keys (fixed RSA/ECDSA environments)
+4. OAuth token introspection (opaque tokens, RFC 7662)
+5. Development testing (static tokens, test key generation)
+
+Each scenario includes: setup steps, code examples, testing guidance, troubleshooting, Cloud Run deployment.
+
+✅ **Agent context updated** - CLAUDE.md updated with:
+- Python 3.11+ (Cloud Run compatibility)
+- PyJWT, cryptography, httpx, Pydantic v2
+- Token verification as server infrastructure (not MCP tools)
+- Feature #010 documented in technology stack
+
+❌ **contracts/** - Not applicable (authentication infrastructure, not API contracts)
+
+## Constitution Check Re-evaluation (Post-Design)
+
+| Principle | Status | Post-Design Notes |
+|-----------|---------|-------------------|
+| **I. FastMCP Server-First** | ✅ PASS | No tools added - verified in design phase |
+| **II. Secure Authentication** | ⚠️ DEVIATION (justified) | Token verification adds auth flexibility while maintaining security standards |
+| **III. Secrets Management** | ✅ PASS | All config via env vars, Cloud Run secrets integration documented |
+| **IV. Test-Driven Development** | ✅ PASS | Comprehensive test scenarios in quickstart.md, ready for TDD implementation |
+| **V. Structured Result Handling** | ✅ PASS | ValidationResult model provides structured success/failure with detailed errors |
+| **VI. Cloud Run Production** | ✅ PASS | Environment-based config, secrets management, deployment scenarios documented |
+| **VII. Progress Transparency** | ✅ PASS | Token validation <100ms - no progress reporting needed |
+| **VIII. Python & Pydantic** | ✅ PASS | All models use Pydantic v2, Python 3.11+ dependencies specified |
+| **IX. ChatGPT Integration** | ✅ PASS | Token verification enables secure ChatGPT access without GitHub OAuth lock-in |
+| **X. MCP JSON Configuration** | ✅ PASS | Environment-based config compatible with all MCP clients |
+| **XI. Tool Implementation** | ✅ PASS | No tools - authentication infrastructure only |
+
+### Final Gates Status
+
+✅ **PASS** - Ready for Phase 2 (tasks.md generation via `/speckit.tasks`)
+
+**Design Validation**:
+- All data models specify Pydantic v2 with comprehensive validation rules
+- All security requirements addressed (clock skew, HMAC key lengths, fail-closed errors)
+- All performance targets documented (<100ms JWT, <200ms introspection)
+- All deployment scenarios covered (production, development, testing)
+- No constitution violations beyond justified authentication deviation
+
+**Next Command**: `/speckit.tasks` to generate dependency-ordered implementation tasks
 

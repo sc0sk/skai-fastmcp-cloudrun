@@ -8,6 +8,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastmcp import Context
+from config import VECTOR_TABLE_NAME
 
 # Load environment variables
 load_dotenv()
@@ -25,7 +26,7 @@ class VectorStoreService:
         user: str = None,
         password: str = None,
         embedding_service: Any = None,
-        table_name: str = "speech_chunks",
+        table_name: str = VECTOR_TABLE_NAME,
     ):
         """
         Initialize PostgreSQL vector store with Cloud SQL connection.
@@ -99,18 +100,13 @@ class VectorStoreService:
                 password=use_password,
             )
 
-            # Initialize table with proper schema (auto-creates if not exists)
-            # This uses LangChain's standard column names: langchain_id, content, embedding, langchain_metadata
-            # Ignore if table already exists (e.g., from manual schema init)
-            try:
-                await engine.ainit_vectorstore_table(
-                    table_name=self.table_name,
-                    vector_size=768,  # Match text-embedding-005 output
-                )
-            except Exception as e:
-                # Table likely already exists - continue with existing schema
-                if "already exists" not in str(e).lower():
-                    raise
+            # Skip table initialization - table should be pre-created with proper schema
+            # This avoids permission issues where the runtime user (fastmcp-server)
+            # doesn't have CREATE TABLE privileges. The table should be created by
+            # an admin user (e.g., via scripts/init_langchain_schema.py).
+            #
+            # If the table doesn't exist, PostgresVectorStore.create() will fail
+            # with a clear error message that the table needs to be created first.
 
             # Create PostgresVectorStore with LangChain defaults
             # This uses standard column names that match the initialized table

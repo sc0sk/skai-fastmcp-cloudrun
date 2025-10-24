@@ -8,6 +8,8 @@ Auto-generated from all feature plans. Last updated: 2025-10-22
 - Cloud SQL PostgreSQL with pgvector extension (LangChain schema: langchain_pg_embedding + speeches metadata table) (004-search-fetch-mcp-tools)
 - Python 3.11+ + FastMCP 2.12.5+ (existing), no new dependencies required (005-chatgpt-integration)
 - N/A (metadata optimization only, no database changes) (005-chatgpt-integration)
+- Python 3.11+ (Cloud Run compatibility requirement) + PyJWT (JWT validation), cryptography (RSA/ECDSA keys), httpx (HTTP introspection), Pydantic v2 (schemas), FastMCP 2.12.0+ (auth provider framework) (010-token-verification)
+- N/A (stateless token validation, no persistent storage required) (010-token-verification)
 
 ## Project Structure
 ```
@@ -22,9 +24,9 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11+ (Cloud Run compatibility): Follow standard conventions
 
 ## Recent Changes
+- 011-mcp-oauth21-security: Added Python 3.11+ (Cloud Run compatibility)
+- 010-token-verification: Added Python 3.11+ (Cloud Run compatibility requirement) + PyJWT (JWT validation), cryptography (RSA/ECDSA keys), httpx (HTTP introspection), Pydantic v2 (schemas), FastMCP 2.12.0+ (auth provider framework)
 - 005-chatgpt-integration: Added Python 3.11+ + FastMCP 2.12.5+ (existing), no new dependencies required
-- 004-search-fetch-mcp-tools: Added Python 3.11+ + FastMCP 2.12.5+, LangChain (langchain-google-vertexai, langchain-google-cloud-sql-pg), Pydantic v2
-- 001-chatgpt-devmode-enhancements: Added Python 3.11+ (Cloud Run compatibility) + FastMCP 2.14.0+ (tool annotations, metadata, icons)
 
 <!-- MANUAL ADDITIONS START -->
 

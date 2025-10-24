@@ -76,3 +76,4 @@ Thumbs.db
 *.key
 credentials.json
 service-account-key.json
+hansard-mcp-local-dev-key.json

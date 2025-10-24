@@ -442,6 +442,65 @@ All PRs MUST:
 - Verify no committed secrets (automated scan)
 - Document breaking changes with migration guide
 
+### Configuration Management
+
+**Configurable Constants Best Practices**:
+
+1. **Centralized Configuration**: All configuration values MUST be defined in a central configuration file (`src/config.py`)
+   ```python
+   # src/config.py
+   VECTOR_TABLE_NAME = "hansard_speeches"
+   METADATA_TABLE_NAME = "speeches"
+   DEFAULT_EMBEDDING_MODEL = "text-embedding-005"
+   ```
+
+2. **No Hardcoded Values**: NEVER hardcode configuration values directly in business logic
+   ```python
+   # ❌ BAD - hardcoded table name
+   await conn.execute("SELECT * FROM speeches")
+
+   # ✅ GOOD - use constant from config
+   from config import METADATA_TABLE_NAME
+   await conn.execute(f"SELECT * FROM {METADATA_TABLE_NAME}")
+   ```
+
+3. **Environment Variable Defaults**: Configuration constants should default to environment variables where appropriate
+   ```python
+   # src/config.py
+   import os
+
+   DEFAULT_GCP_REGION = "us-central1"
+
+   def get_gcp_region() -> str:
+       return os.getenv("GCP_REGION", DEFAULT_GCP_REGION)
+   ```
+
+4. **Type Safety**: Use type hints for all configuration getters
+   ```python
+   def get_cloudsql_instance() -> str:
+       return os.getenv("CLOUDSQL_INSTANCE")
+   ```
+
+5. **Documentation**: All configuration constants MUST have inline comments explaining their purpose
+   ```python
+   # Database table names
+   VECTOR_TABLE_NAME = "hansard_speeches"  # LangChain PostgresVectorStore table with embeddings
+   METADATA_TABLE_NAME = "speeches"  # Metadata table for speech records
+   ```
+
+**What Should Be Configurable**:
+- Database table names
+- API endpoints and URLs
+- Model names and versions
+- Dimension sizes (embedding dimensions, vector sizes)
+- Default values (limits, timeouts, batch sizes)
+- Feature flags
+
+**What Should NOT Be Configurable**:
+- Business logic constants (algorithm parameters that define behavior)
+- Internal implementation details
+- Temporary values used only within a single function
+
 ## FastMCP CLI Standards (NON-NEGOTIABLE)
 
 All FastMCP servers MUST be developed, tested, and deployed using the FastMCP CLI. The CLI provides standardized workflows for development, testing, client installation, and deployment.

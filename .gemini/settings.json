@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "hansard-mcp": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--project",
+        "/home/user/skai-fastmcp-cloudrun",
+        "fastmcp",
+        "run",
+        "src/server.py:mcp"
+      ],
+      "env": {
+        "PYTHONPATH": "src",
+        "DANGEROUSLY_OMIT_AUTH": "true",
+        "GCP_PROJECT_ID": "skai-fastmcp-cloudrun",
+        "GCP_REGION": "us-central1",
+        "CLOUDSQL_INSTANCE": "hansard-db-v2",
+        "CLOUDSQL_DATABASE": "hansard",
+        "CLOUDSQL_USER": "fastmcp-server"
+      }
+    }
+  }
+}
