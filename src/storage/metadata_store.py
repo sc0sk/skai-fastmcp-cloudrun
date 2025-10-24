@@ -376,6 +376,96 @@ class MetadataStore:
         finally:
             await conn.close()
 
+    async def check_speech_exists(self, speech_id: str) -> bool:
+        """Check if a speech with given ID exists.
+
+        Args:
+            speech_id: Speech ID to check
+
+        Returns:
+            True if speech exists, False otherwise
+        """
+        conn = await self._get_connection()
+        try:
+            result = await conn.fetchval(
+                f"SELECT EXISTS(SELECT 1 FROM {METADATA_TABLE_NAME} WHERE speech_id = $1)",
+                speech_id
+            )
+            return bool(result)
+        finally:
+            await conn.close()
+
+    async def store_speech(
+        self,
+        speech_id: str,
+        speaker: str,
+        party: str,
+        chamber: str,
+        date: Any,
+        title: str,
+        text: str,
+        state: Optional[str] = None,
+        hansard_reference: Optional[str] = None,
+        ctx: Optional[Context] = None
+    ) -> str:
+        """Store speech from frontmatter ingestion.
+
+        Args:
+            speech_id: Unique speech identifier (from frontmatter)
+            speaker: Speaker name
+            party: Political party
+            chamber: Chamber (REPS/SENATE)
+            date: Speech date
+            title: Speech title
+            text: Full speech text
+            state: Optional state
+            hansard_reference: Optional Hansard reference
+            ctx: Optional FastMCP context
+
+        Returns:
+            The speech_id that was stored
+        """
+        conn = await self._get_connection()
+        try:
+            word_count = len(text.split())
+
+            await conn.execute(
+                f"""
+                INSERT INTO {METADATA_TABLE_NAME} (
+                    speech_id, title, full_text, speaker, party, chamber,
+                    state, date, hansard_reference, word_count
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                ON CONFLICT (speech_id) DO UPDATE SET
+                    title = EXCLUDED.title,
+                    full_text = EXCLUDED.full_text,
+                    speaker = EXCLUDED.speaker,
+                    party = EXCLUDED.party,
+                    chamber = EXCLUDED.chamber,
+                    state = EXCLUDED.state,
+                    date = EXCLUDED.date,
+                    hansard_reference = EXCLUDED.hansard_reference,
+                    word_count = EXCLUDED.word_count,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                speech_id,
+                title,
+                text,
+                speaker,
+                party,
+                chamber,
+                state,
+                date,
+                hansard_reference,
+                word_count
+            )
+
+            if ctx:
+                await ctx.report_progress(50, 100)
+
+            return speech_id
+        finally:
+            await conn.close()
+
     async def close(self):
         """Close Cloud SQL connector."""
         if self._connector:

@@ -52,3 +52,40 @@ def get_database_password() -> str:
 def get_vertex_ai_location() -> str:
     """Get Vertex AI location from environment."""
     return os.getenv("VERTEX_AI_LOCATION", DEFAULT_VERTEX_AI_LOCATION)
+
+# Ingestion configuration
+DEFAULT_ADMIN_ROLE_CLAIM = "role"
+DEFAULT_ADMIN_ROLE_VALUE = "admin"
+DEFAULT_INGESTION_BASE_DIR = "/data/hansard"
+DEFAULT_DUPLICATE_POLICY = "skip"
+DEFAULT_CHUNK_SIZE = 1000
+DEFAULT_CHUNK_OVERLAP = 100
+DEFAULT_EMBEDDING_BATCH_SIZE = 250
+
+def get_admin_role_claim() -> str:
+    """Get admin role claim name from environment."""
+    return os.getenv("ADMIN_ROLE_CLAIM", DEFAULT_ADMIN_ROLE_CLAIM)
+
+def get_admin_role_value() -> str:
+    """Get required admin role value from environment."""
+    return os.getenv("ADMIN_ROLE_VALUE", DEFAULT_ADMIN_ROLE_VALUE)
+
+def get_ingestion_base_dir() -> str:
+    """Get ingestion base directory from environment."""
+    return os.getenv("INGESTION_BASE_DIR", DEFAULT_INGESTION_BASE_DIR)
+
+def get_duplicate_policy() -> str:
+    """Get duplicate handling policy from environment."""
+    return os.getenv("DUPLICATE_POLICY", DEFAULT_DUPLICATE_POLICY)
+
+def get_chunk_size() -> int:
+    """Get text chunk size from environment."""
+    return int(os.getenv("CHUNK_SIZE", str(DEFAULT_CHUNK_SIZE)))
+
+def get_chunk_overlap() -> int:
+    """Get chunk overlap size from environment."""
+    return int(os.getenv("CHUNK_OVERLAP", str(DEFAULT_CHUNK_OVERLAP)))
+
+def get_embedding_batch_size() -> int:
+    """Get embedding batch size from environment."""
+    return int(os.getenv("EMBEDDING_BATCH_SIZE", str(DEFAULT_EMBEDDING_BATCH_SIZE)))

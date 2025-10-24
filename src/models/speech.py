@@ -7,6 +7,49 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, computed_field, field_validator, ConfigDict
 
+from models.enums import PartyEnum, ChamberEnum
+
+
+class SpeechFrontmatter(BaseModel):
+    """Parsed frontmatter metadata from markdown file.
+
+    This model represents the YAML frontmatter extracted from parliamentary
+    speech markdown files. All fields are validated according to data-model.md.
+    """
+
+    speech_id: str = Field(
+        description="Unique identifier for speech (from frontmatter)"
+    )
+    speaker: str = Field(
+        min_length=1,
+        max_length=200,
+        description="Speaker name"
+    )
+    party: PartyEnum = Field(
+        description="Political party affiliation"
+    )
+    chamber: ChamberEnum = Field(
+        description="Parliamentary chamber (REPS or SENATE)"
+    )
+    date: date_type = Field(
+        description="Speech date in ISO 8601 format (YYYY-MM-DD)"
+    )
+    title: str = Field(
+        min_length=1,
+        max_length=500,
+        description="Speech title or topic"
+    )
+    state: Optional[str] = Field(
+        default=None,
+        max_length=50,
+        description="Electoral state/territory (optional)"
+    )
+    hansard_reference: Optional[str] = Field(
+        default=None,
+        max_length=100,
+        description="Official Hansard reference number (optional)"
+    )
+
 
 class SpeechMetadata(BaseModel):
     """Pydantic model for speech metadata validation during ingestion."""

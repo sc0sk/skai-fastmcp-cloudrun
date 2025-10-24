@@ -13,6 +13,6 @@ PartyEnum = Literal[
 
 # Australian Parliament chambers
 ChamberEnum = Literal[
-    "House of Representatives",  # Lower house
-    "Senate"                     # Upper house
+    "REPS",    # House of Representatives
+    "SENATE"   # Senate
 ]
