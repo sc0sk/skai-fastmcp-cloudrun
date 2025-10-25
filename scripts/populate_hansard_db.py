@@ -27,7 +27,7 @@ import hashlib
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Import sample speeches
 sys.path.insert(0, str(Path(__file__).parent))
