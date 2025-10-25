@@ -1,6 +1,6 @@
 # Research: LangChain 0.x to 1.0 Migration
 
-**Feature**: 001-update-langchain-1-0  
+**Feature**: 014-update-langchain-1-0  
 **Created**: 2025-10-25  
 **Status**: Complete
 
@@ -35,14 +35,14 @@ LangChain 1.0 represents a major refactoring that splits the monolithic `langcha
 |---------|---------|--------|--------|-------|
 | `langchain` | 0.x (unpinned) | >=1.0.0 | ✅ Compatible | Core package |
 | `langchain-text-splitters` | N/A | >=0.3.0 | ✅ New package | Standalone text splitting |
-| `langchain-google-vertexai` | Latest | >=2.0.0 | ✅ Compatible | Already supports 1.0 |
-| `langchain-google-cloud-sql-pg` | >=0.14.0 | >=0.14.0 | ✅ Compatible | Already supports 1.0 |
+| `langchain-google-vertexai` | Latest | >=2.0.0 | ✅ Compatible | Supports 1.0 |
+| `langchain-google-cloud-sql-pg` | 0.14.1 | ≥0.14.0 | ❌ Not 1.0 compatible | Requires `langchain-core<1.0.0` |
 
-**Decision**: All Google integration packages already support LangChain 1.0 as of their latest releases.
+**Decision**: `langchain-google-cloud-sql-pg` currently blocks a full 1.0 upgrade due to a strict `<1.0.0` constraint on `langchain-core`. This aligns with IMPLEMENTATION_BLOCKERS.md.
 
 **Alternatives Considered**:
-- **Pin to 0.x**: Rejected - would miss security updates and future compatibility
-- **Wait for broader ecosystem**: Rejected - Google packages already updated
+- **Pin to 0.x**: Acceptable interim path while monitoring for 1.0 support
+- **Migrate to `langchain-postgres`**: Unblocks 1.0 immediately by replacing `langchain-google-cloud-sql-pg` with `langchain-postgres` (PGVector). See Feature 016 for this migration path.
 
 ### 3. API Compatibility Analysis
 
@@ -135,7 +135,7 @@ def test_text_splitter_compatibility():
 ```
 
 **Integration Tests** (existing):
-- `test_tools_direct.py` - Runs vector search on real database
+- `test_tools.py` - Runs vector search on real database
 - `test_mcp_tools.py` - End-to-end tool invocation
 
 **Acceptance Criteria**:

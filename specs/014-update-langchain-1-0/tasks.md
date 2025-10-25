@@ -1,14 +1,21 @@
 # Tasks: Update LangChain to 1.0
 
-**Feature**: 001-update-langchain-1-0  
+**Feature**: 014-update-langchain-1-0  
 **Created**: 2025-10-25  
-**Type**: Dependency Upgrade
+**Type**: Dependency Upgrade  
+**Status**: ⚠️ BLOCKED - See IMPLEMENTATION_BLOCKERS.md
+
+## ⚠️ Implementation Blocker Discovered
+
+**Issue**: `langchain-google-cloud-sql-pg==0.14.1` requires `langchain-core<1.0.0`, preventing LangChain 1.0 upgrade.
+
+**Resolution**: Awaiting upstream package update or adopting pre-1.0 pin strategy. See `IMPLEMENTATION_BLOCKERS.md` for full analysis and options.
 
 ## Task Summary
 
 - **Total Tasks**: 16
 - **User Stories**: 3 (US1: Seamless Upgrade P1, US2: Backward Compatible Data P1, US3: Updated Documentation P2)
-- **Estimated Time**: 2 hours
+- **Estimated Time**: 2 hours (pending blocker resolution)
 - **Approach**: Incremental upgrade with continuous validation
 
 ---
@@ -34,23 +41,24 @@
 
 **Goal**: Prepare environment and capture 0.x baseline behavior for comparison
 
-- [ ] T001 Create feature branch `001-update-langchain-1-0` from main
+- [X] T001 Create feature branch `014-update-langchain-1-0` from main
   - Verify branch created
   - Confirm working directory clean
   - Document current LangChain version: `pip show langchain langchain-google-vertexai langchain-google-cloud-sql-pg`
 
 - [ ] T002 [P] Capture 0.x baseline outputs for regression testing
-  - Run `test_tools_direct.py` and capture output
+  - Run `test_tools.py` and capture output
   - Save sample document chunks from current `RecursiveCharacterTextSplitter`
   - Save search results for test query "climate change" (top 5 speech IDs)
-  - Document: Create `specs/001-update-langchain-1-0/baseline.md` with outputs
+  - Document: Create `specs/014-update-langchain-1-0/baseline.md` with outputs
 
-- [ ] T003 [P] Verify dependency compatibility on PyPI
+- [X] T003 [P] Verify dependency compatibility on PyPI
   - Check `langchain>=1.0.0` latest version
   - Check `langchain-text-splitters>=0.3.0` availability  
   - Check `langchain-google-vertexai` has 1.0-compatible version
   - Check `langchain-google-cloud-sql-pg` has 1.0-compatible version
   - Document: Update `research.md` compatibility matrix with actual versions
+  - Finding: As of 2025-10-25, `langchain-google-cloud-sql-pg==0.14.1` pins `langchain-core<1.0.0` (NOT compatible). Consider Feature 016 migration to `langchain-postgres` to unblock.
 
 ---
 
@@ -58,7 +66,7 @@
 
 **Story Goal**: Upgrade to LangChain 1.0 without breaking existing functionality
 
-**Independent Test**: All existing tests (`test_tools_direct.py`, unit tests) pass with LangChain 1.0
+**Independent Test**: All existing tests (`test_tools.py`, unit tests) pass with LangChain 1.0
 
 **Acceptance Criteria**:
 - ✅ Vector store initializes successfully
@@ -68,7 +76,7 @@
 
 ### Dependency Update
 
-- [ ] T101 [US1] Update `pyproject.toml` with LangChain 1.0 dependencies
+- [X] T101 [US1] Update `pyproject.toml` with LangChain 1.0 dependencies
   - File: `pyproject.toml`
   - Change `langchain` (unpinned) → `langchain>=1.0.0`
   - Add `langchain-text-splitters>=0.3.0`
@@ -78,36 +86,46 @@
 
 ### Import Path Updates
 
-- [ ] T102 [P] [US1] Update imports in `src/tools/ingest.py`
+- [X] T102 [P] [US1] Update imports in `src/tools/ingest.py`
   - File: `src/tools/ingest.py`
   - Change: `from langchain.text_splitter import RecursiveCharacterTextSplitter`
   - To: `from langchain_text_splitters import RecursiveCharacterTextSplitter`
   - Verify no other LangChain imports need updating
 
-- [ ] T103 [P] [US1] Update imports in `src/tools/ingest_markdown_file.py`
+- [X] T103 [P] [US1] Update imports in `src/tools/ingest_markdown_file.py`
   - File: `src/tools/ingest_markdown_file.py`
   - Change: `from langchain.text_splitter import RecursiveCharacterTextSplitter`
   - To: `from langchain_text_splitters import RecursiveCharacterTextSplitter`
   - Verify no other LangChain imports need updating
 
-- [ ] T104 [P] [US1] Verify `src/storage/vector_store.py` imports (no changes expected)
+- [X] T104 [P] [US1] Verify `src/storage/vector_store.py` imports (no changes expected)
   - File: `src/storage/vector_store.py`
   - Confirm: `from langchain_google_cloud_sql_pg import PostgresVectorStore, PostgresEngine`
   - Confirm: `from langchain_google_vertexai import VertexAIEmbeddings`
   - These imports already use 1.0-style packages, no changes needed
   - Document: Note in commit message that vector_store.py unchanged
 
+- [X] T104a [P] [US1] Update and validate import paths across scripts
+  - Files: `scripts/*.py` that import `RecursiveCharacterTextSplitter`
+  - Change: `from langchain.text_splitter import RecursiveCharacterTextSplitter` → `from langchain_text_splitters import RecursiveCharacterTextSplitter`
+  - Smoke test: Run each updated script with `--help` or a dry-run mode if available
+  - Document: List updated scripts and validation notes
+
 ### Installation & Validation
 
-- [ ] T105 [US1] Install LangChain 1.0 and verify dependency resolution
-  - Run: `pip install -e .` in project root
-  - Verify no dependency conflicts
-  - Verify `pip show langchain` reports version >=1.0.0
-  - Verify `langchain-text-splitters` installed
+- [⚠️] T105 [US1] Install LangChain 1.0 and verify dependency resolution **BLOCKED**
+  - **Status**: Cannot proceed - dependency conflict
+  - **Blocker**: `langchain-google-cloud-sql-pg==0.14.1` requires `langchain-core<1.0.0`
+  - **See**: IMPLEMENTATION_BLOCKERS.md for resolution options
+  - Run: `pip install -e .` in project root (currently fails with conflict)
+  - Verify no dependency conflicts (blocked)
+  - Verify `pip show langchain` reports version >=1.0.0 (blocked)
+  - Verify `langchain-text-splitters` installed (blocked)
   - Document: If conflicts occur, adjust version pins in pyproject.toml
 
-- [ ] T106 [US1] Run existing test suite and validate compatibility
-  - Run: `PYTHONPATH=src:. .venv/bin/python test_tools_direct.py`
+- [⚠️] T106 [US1] Run existing test suite and validate compatibility **BLOCKED**
+  - **Depends on**: T105 (install deps)
+  - Run: `PYTHONPATH=src:. .venv/bin/python test_tools.py` (blocked)
   - Expected: All tests pass (search, fetch, bulk ingestion check)
   - Compare output to baseline from T002
   - Verify: Zero "DeprecationWarning" or "FutureWarning" messages
@@ -126,32 +144,38 @@
 - ✅ Search results identical to 0.x
 - ✅ Vector dimensions unchanged (768)
 
+**⚠️ Status**: All tasks BLOCKED pending T105 resolution
+
 ### Database Compatibility Validation
 
-- [ ] T201 [US2] Validate vector store connection with LangChain 1.0
+- [⚠️] T201 [US2] Validate vector store connection with LangChain 1.0 **BLOCKED**
+  - **Depends on**: T105 (install deps)
   - Start Cloud SQL proxy: `./scripts/start_cloud_sql_proxy.sh`
   - Run: Python script to connect with `PostgresVectorStore`
   - Verify: Connection succeeds without errors
   - Verify: No "table schema migration" messages in logs
   - Document: Connection logs show no schema changes
 
-- [ ] T202 [US2] Validate existing vector search results match 0.x baseline
+- [⚠️] T202 [US2] Validate existing vector search results match 0.x baseline **BLOCKED**
+  - **Depends on**: T201
   - Run: Search query for "climate change" (limit 5)
   - Compare: Top 5 speech IDs match baseline from T002
   - Compare: Similarity scores are within 0.01 tolerance
   - Verify: Speech text returned is unchanged
   - Document: If results differ, investigate embedding compatibility
 
-- [ ] T203 [P] [US2] Validate text chunking produces identical output
+- [⚠️] T203 [P] [US2] Validate text chunking produces identical output **BLOCKED**
+  - **Depends on**: T105
   - File: Create test script `tests/unit/test_text_splitter_compat.py`
   - Test: Chunk sample document (5000 chars) with chunk_size=1000, overlap=200
   - Compare: Chunk count matches baseline
   - Compare: First chunk content matches byte-for-byte
   - Assert: All chunks match baseline from T002
 
-- [ ] T204 [P] [US2] Validate embedding dimensions unchanged
+- [⚠️] T204 [P] [US2] Validate embedding dimensions unchanged **BLOCKED**
+  - **Depends on**: T105
   - Run: Generate embedding for test text "test sample"
-  - Verify: Dimension is 768 (VertexAI textembedding-gecko)
+  - Verify: Dimension is 768 (Vertex AI text-embedding-005)
   - Verify: Vector values are reasonable (not all zeros, normalized)
   - Document: Embedding generation works identically
 
@@ -168,21 +192,23 @@
 - ✅ README examples work with 1.0
 - ✅ No references to deprecated 0.x patterns
 
+**⚠️ Status**: Postponed pending blocker resolution (low priority, can complete after T105-T204)
+
 ### Documentation Updates
 
-- [ ] T301 [P] [US3] Update inline comments in modified files
+- [⚠️] T301 [P] [US3] Update inline comments in modified files **POSTPONED**
   - Files: `src/tools/ingest.py`, `src/tools/ingest_markdown_file.py`
   - Update: Comments referencing `RecursiveCharacterTextSplitter`
   - Add: Note about LangChain 1.0 package structure if helpful
   - Verify: Docstrings still accurate
 
-- [ ] T302 [P] [US3] Update agent context with LangChain 1.0 information
+- [⚠️] T302 [P] [US3] Update agent context with LangChain 1.0 information **POSTPONED**
   - File: `.github/copilot-instructions.md`
   - Add: "LangChain 1.0 with langchain-text-splitters package"
-  - Update: Recent Changes section with Feature 001
+  - Update: Recent Changes section with Feature 014
   - Document: Import patterns for future reference
 
-- [ ] T303 [P] [US3] Update README.md if LangChain mentioned
+- [⚠️] T303 [P] [US3] Update README.md if LangChain mentioned **POSTPONED**
   - File: `README.md`
   - Check: Does README reference LangChain usage?
   - Update: If yes, ensure version/import paths match 1.0

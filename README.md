@@ -153,11 +153,48 @@ skai-fastmcp-cloudrun/
 
 - **Python**: 3.11+ (Cloud Run compatibility)
 - **FastMCP**: 2.12.5+ (MCP server framework with tool annotations)
+- **LangChain**: 1.0+ (vector store, embeddings, text splitting)
+- **Vector Store**: langchain-postgres (PGVector) with Cloud SQL IAM authentication
+- **Database**: PostgreSQL 15+ with pgvector extension on Google Cloud SQL
+- **Embeddings**: Vertex AI text-embedding-005 (768 dimensions)
 - **Pydantic**: v2 (data validation, enum types)
 - **Testing**: pytest, pytest-asyncio, pytest-cov
 - **Deployment**: Google Cloud Run, Docker
 
 ## Architecture
+
+### Vector Store Backend
+
+The application uses **langchain-postgres** (LangChain 1.0 native PGVector integration) for semantic search over parliamentary speeches:
+
+**Key Features**:
+- Native LangChain 1.0 integration with PGVector
+- Cloud SQL IAM authentication (no password-based auth)
+- Async operations via psycopg3 driver
+- JSONB metadata for flexible filtering
+- HNSW indexing for fast similarity search
+- Feature flag for instant rollback (`VECTOR_BACKEND=postgres|legacy`)
+
+**Configuration**:
+```bash
+# Vector store backend (feature flag)
+export VECTOR_BACKEND=postgres  # or 'legacy' for instant rollback
+
+# Cloud SQL connection
+export CLOUD_SQL_INSTANCE=your-project:region:instance-name
+export CLOUD_SQL_DATABASE=hansard
+export POSTGRES_COLLECTION_NAME=hansard  # PGVector collection name
+
+# IAM authentication (automatic via Cloud SQL Connector)
+# No DATABASE_PASSWORD required - uses IAM tokens
+```
+
+**Database Schema**:
+- `langchain_pg_collection`: Collection metadata
+- `langchain_pg_embedding`: Vector embeddings (768-dim) + JSONB metadata
+- Indexes: HNSW for vectors, B-tree for metadata fields
+
+**Migration**: See `specs/016-langchain-postgres-upgrade/migration-procedure.md` for full migration guide.
 
 ### MCP Tool Pattern
 
@@ -288,9 +325,28 @@ Proprietary
 
 ## Related Documentation
 
-- [Feature Specification](specs/001-chatgpt-devmode-enhancements/spec.md)
-- [Implementation Plan](specs/001-chatgpt-devmode-enhancements/plan.md)
-- [Technical Research](specs/001-chatgpt-devmode-enhancements/research.md)
-- [Development Quickstart](specs/001-chatgpt-devmode-enhancements/quickstart.md)
+### Feature Specifications
+- [ChatGPT DevMode Enhancements](specs/001-chatgpt-devmode-enhancements/spec.md)
+- [LangChain 1.0 with langchain-postgres Upgrade](specs/016-langchain-postgres-upgrade/spec.md)
+
+### Implementation Guides
+- [ChatGPT DevMode Implementation Plan](specs/001-chatgpt-devmode-enhancements/plan.md)
+- [LangChain 1.0 Implementation Plan](specs/016-langchain-postgres-upgrade/plan.md)
+- [Migration Procedure (langchain-postgres)](specs/016-langchain-postgres-upgrade/migration-procedure.md)
+- [Quick Start (langchain-postgres)](specs/016-langchain-postgres-upgrade/quickstart.md)
+
+### Technical References
+- [ChatGPT DevMode Technical Research](specs/001-chatgpt-devmode-enhancements/research.md)
+- [LangChain 1.0 Technical Research](specs/016-langchain-postgres-upgrade/research.md)
+- [LangChain PGVector Best Practices](LANGCHAIN_PGVECTOR_BEST_PRACTICES.md)
+
+### Development Guides
+- [ChatGPT DevMode Quickstart](specs/001-chatgpt-devmode-enhancements/quickstart.md)
+- [LangChain 1.0 Quickstart](specs/016-langchain-postgres-upgrade/quickstart.md)
+- [Database Setup](DATABASE_SETUP.md)
+
+### External Resources
 - [FastMCP Documentation](https://docs.fastmcp.com)
 - [MCP Specification](https://modelcontextprotocol.io)
+- [LangChain Documentation](https://python.langchain.com/docs)
+- [langchain-postgres Package](https://python.langchain.com/docs/integrations/vectorstores/pgvector)

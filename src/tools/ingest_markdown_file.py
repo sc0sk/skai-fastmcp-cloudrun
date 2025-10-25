@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastmcp import Context
 from pydantic import BaseModel, Field
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from tools.ingestion_utils.markdown_parser import parse_markdown_file
 from tools.ingestion_utils.path_validator import validate_file_path

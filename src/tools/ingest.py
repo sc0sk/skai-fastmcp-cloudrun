@@ -9,7 +9,7 @@ from src.models.speech import SpeechMetadata
 from src.storage.vector_store import get_default_vector_store
 from src.storage.metadata_store import get_default_metadata_store
 from src.utils.debug import format_debug_message, sanitize_debug_data, TimingContext
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Progress stages (percentage ranges)
 STAGE_VALIDATION = (0, 20)

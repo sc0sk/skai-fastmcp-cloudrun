@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from storage.metadata_store import get_default_metadata_store
 from storage.vector_store import get_default_vector_store
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 async def chunk_text(text: str, chunk_size: int = 800, chunk_overlap: int = 150):

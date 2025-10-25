@@ -15,7 +15,7 @@ from parsers.hansard_parser import HansardMarkdownParser
 from models.speech import SpeechMetadata
 from storage.metadata_store import get_default_metadata_store
 from storage.vector_store import get_default_vector_store
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 def compute_content_hash(text: str) -> str:

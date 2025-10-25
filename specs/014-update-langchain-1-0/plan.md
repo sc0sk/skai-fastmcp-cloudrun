@@ -1,8 +1,8 @@
 ````markdown
 # Implementation Plan: Update LangChain to 1.0
 
-**Branch**: `001-update-langchain-1-0` | **Date**: 2025-10-25 | **Spec**: [spec.md](./spec.md)
-**Input**: Feature specification from `/specs/001-update-langchain-1-0/spec.md`
+**Branch**: `014-update-langchain-1-0` | **Date**: 2025-10-25 | **Spec**: [spec.md](./spec.md)
+**Input**: Feature specification from `/specs/014-update-langchain-1-0/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
 
@@ -63,7 +63,7 @@ Upgrade project from LangChain 0.x to LangChain 1.0 to stay current with securit
 ### Documentation (this feature)
 
 ```text
-specs/001-update-langchain-1-0/
+specs/014-update-langchain-1-0/
 ├── spec.md              # Feature specification (COMPLETE)
 ├── plan.md              # This file (/speckit.plan command output)
 ├── research.md          # Phase 0 output (TO BE GENERATED)
@@ -88,7 +88,7 @@ src/
 tests/
 ├── unit/                          # VALIDATE: All tests must pass
 ├── integration/                   # VALIDATE: Vector store compatibility
-└── test_tools_direct.py           # VALIDATE: End-to-end tool functionality
+└── test_tools.py                  # VALIDATE: End-to-end tool functionality
 
 pyproject.toml                     # MODIFY: Update dependency versions
 
@@ -169,7 +169,7 @@ Since the project has no formal constitution with enforced principles, there are
    - Validation: Tool signatures in `src/tools/*.py` stay the same
 
 3. **Quickstart Guide** (GENERATE)
-   - File: `specs/001-update-langchain-1-0/quickstart.md`
+   - File: `specs/014-update-langchain-1-0/quickstart.md`
    - Content:
      - How to verify LangChain 1.0 installation
      - How to test backward compatibility

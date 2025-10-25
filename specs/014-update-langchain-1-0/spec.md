@@ -1,6 +1,6 @@
 # Feature Specification: Update LangChain to 1.0
 
-**Feature Branch**: `001-update-langchain-1-0`  
+**Feature Branch**: `014-update-langchain-1-0`  
 **Created**: 2025-10-25  
 **Status**: Draft  
 **Type**: Dependency Upgrade  
@@ -32,7 +32,7 @@ The project currently uses LangChain 0.x without version pinning in `pyproject.t
 
 **Why this priority**: Critical for security updates, bug fixes, and long-term maintainability. LangChain 0.x will eventually become unsupported.
 
-**Independent Test**: Can be fully tested by running existing test suite (`test_tools_direct.py`, unit tests) and verifying all vector operations (search, ingest, embedding generation) work identically to before.
+**Independent Test**: Can be fully tested by running existing test suite (`test_tools.py`, unit tests) and verifying all vector operations (search, ingest, embedding generation) work identically to before.
 
 **Acceptance Scenarios**:
 
@@ -123,7 +123,7 @@ The project currently uses LangChain 0.x without version pinning in `pyproject.t
 
 ### Testing Checklist
 
-- [ ] Run `test_tools_direct.py` - all searches return results
+- [ ] Run `test_tools.py` - all searches return results
 - [ ] Run `test_mcp_tools.py` - MCP tool calls work end-to-end
 - [ ] Test ingestion with `ingest_markdown_file` tool - chunking works
 - [ ] Query existing speeches - results match pre-upgrade

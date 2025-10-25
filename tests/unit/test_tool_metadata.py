@@ -3,7 +3,7 @@
 import pytest
 from typing import get_args
 
-models.enums import ChamberEnum, PartyEnum
+from models.enums import ChamberEnum, PartyEnum
 
 
 class TestEnumDefinitions:

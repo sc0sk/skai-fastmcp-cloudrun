@@ -19,7 +19,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent))
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_cloud_sql_pg import PostgresEngine, PostgresVectorStore
 from langchain_google_vertexai import VertexAIEmbeddings
 from parsers.hansard_parser import HansardMarkdownParser

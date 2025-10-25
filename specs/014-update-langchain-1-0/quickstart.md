@@ -1,6 +1,6 @@
 # LangChain 1.0 Upgrade Quickstart
 
-**Feature**: 001-update-langchain-1-0  
+**Feature**: 014-update-langchain-1-0  
 **Audience**: Developers upgrading this project to LangChain 1.0  
 **Time Required**: ~2 hours (including testing)
 
@@ -19,7 +19,7 @@ This guide walks you through upgrading the Hansard MCP server from LangChain 0.x
 
 Before starting:
 - [ ] You have Python 3.11+ installed
-- [ ] You're on branch `001-update-langchain-1-0`
+- [ ] You're on branch `014-update-langchain-1-0`
 - [ ] All existing tests pass on 0.x
 - [ ] Cloud SQL proxy is accessible (for database validation)
 
@@ -33,7 +33,7 @@ Before starting:
 
 ```bash
 cd /home/user/skai-fastmcp-cloudrun
-pip freeze > specs/001-update-langchain-1-0/pre-upgrade-deps.txt
+pip freeze > specs/014-update-langchain-1-0/pre-upgrade-deps.txt
 ```
 
 ### 1.2 Run Existing Tests
@@ -43,7 +43,7 @@ pip freeze > specs/001-update-langchain-1-0/pre-upgrade-deps.txt
 source .venv/bin/activate  # or your venv path
 
 # Run tests and save output
-PYTHONPATH=src:. python test_tools_direct.py > specs/001-update-langchain-1-0/baseline-tests.txt 2>&1
+PYTHONPATH=src:. python test_tools.py > specs/014-update-langchain-1-0/baseline-tests.txt 2>&1
 ```
 
 **Expected**: All tests pass. Save this output for comparison.
@@ -63,7 +63,7 @@ from src.storage.vector_store import get_vector_store
 store = get_vector_store()
 results = store.similarity_search("climate change", k=5)
 
-with open("specs/001-update-langchain-1-0/baseline-search.txt", "w") as f:
+with open("specs/014-update-langchain-1-0/baseline-search.txt", "w") as f:
     for i, doc in enumerate(results):
         f.write(f"Result {i+1}: {doc.metadata.get('speech_id', 'unknown')}\n")
         f.write(f"Content: {doc.page_content[:100]}...\n\n")
@@ -88,7 +88,7 @@ splitter = RecursiveCharacterTextSplitter(
 )
 chunks = splitter.split_text(sample_text)
 
-with open("specs/001-update-langchain-1-0/baseline-chunks.txt", "w") as f:
+with open("specs/014-update-langchain-1-0/baseline-chunks.txt", "w") as f:
     f.write(f"Total chunks: {len(chunks)}\n\n")
     for i, chunk in enumerate(chunks):
         f.write(f"--- Chunk {i+1} ({len(chunk)} chars) ---\n")
@@ -194,7 +194,7 @@ from langchain_google_vertexai import VertexAIEmbeddings
 ### 4.1 Run Test Suite
 
 ```bash
-PYTHONPATH=src:. python test_tools_direct.py
+PYTHONPATH=src:. python test_tools.py
 ```
 
 **Expected**: ✅ All tests pass (identical to baseline)
@@ -214,7 +214,7 @@ python scripts/capture_baseline.py
 
 Compare output:
 ```bash
-diff specs/001-update-langchain-1-0/baseline-search.txt specs/001-update-langchain-1-0/baseline-search.txt
+diff specs/014-update-langchain-1-0/baseline-search.txt specs/014-update-langchain-1-0/baseline-search.txt
 ```
 
 **Expected**: ✅ No differences (or only timestamp differences)
@@ -233,7 +233,7 @@ python scripts/capture_baseline_chunks.py
 
 Compare output:
 ```bash
-diff specs/001-update-langchain-1-0/baseline-chunks.txt specs/001-update-langchain-1-0/baseline-chunks.txt
+diff specs/014-update-langchain-1-0/baseline-chunks.txt specs/014-update-langchain-1-0/baseline-chunks.txt
 ```
 
 **Expected**: ✅ Byte-for-byte identical chunks
@@ -247,7 +247,7 @@ diff specs/001-update-langchain-1-0/baseline-chunks.txt specs/001-update-langcha
 ### 4.4 Check for Deprecation Warnings
 
 ```bash
-PYTHONPATH=src:. python -W all test_tools_direct.py 2>&1 | grep -i deprecat
+PYTHONPATH=src:. python -W all test_tools.py 2>&1 | grep -i deprecat
 ```
 
 **Expected**: ✅ No deprecation warnings
@@ -308,7 +308,7 @@ Edit `.github/copilot-instructions.md`:
 - PostgreSQL via Cloud SQL with pgvector extension
 
 ## Recent Changes
-- 001-update-langchain-1-0: Upgraded LangChain to 1.0
+- 014-update-langchain-1-0: Upgraded LangChain to 1.0
   - Import path: langchain.text_splitter → langchain_text_splitters
   - All dependencies updated to 1.0-compatible versions
   - Backward compatible: existing vectors work unchanged
@@ -365,7 +365,7 @@ Validation:
 ### 6.3 Push to Remote
 
 ```bash
-git push origin 001-update-langchain-1-0
+git push origin 014-update-langchain-1-0
 ```
 
 ---
@@ -476,7 +476,7 @@ If critical issues arise:
 
 ```bash
 pip uninstall langchain langchain-text-splitters
-pip install -r specs/001-update-langchain-1-0/pre-upgrade-deps.txt
+pip install -r specs/014-update-langchain-1-0/pre-upgrade-deps.txt
 ```
 
 ### 2. Revert Code Changes
@@ -488,14 +488,14 @@ git checkout main -- pyproject.toml src/tools/ingest.py src/tools/ingest_markdow
 ### 3. Verify Rollback
 
 ```bash
-PYTHONPATH=src:. python test_tools_direct.py
+PYTHONPATH=src:. python test_tools.py
 ```
 
 **Expected**: Tests pass with 0.x
 
 ### 4. Document Issues
 
-Add to `specs/001-update-langchain-1-0/rollback-notes.md`:
+Add to `specs/014-update-langchain-1-0/rollback-notes.md`:
 - What failed
 - Error messages
 - Hypotheses for root cause

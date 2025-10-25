@@ -1,50 +1,43 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# Spec-Driven Development Constitution (skai-fastmcp-cloudrun)
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Spec-First (NON-NEGOTIABLE)
+Every feature starts as a spec under `specs/<NNN>-<name>/` with, at minimum: `spec.md`, `plan.md`, and `tasks.md`. Implementation does not begin until these exist and are reviewed. Specs must define user stories, functional and non-functional requirements, acceptance criteria, risks, and a rollout/rollback plan.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. Test-First Quality Gates
+All work must pass: (1) Build, (2) Lint/Typecheck, (3) Tests. For code changes, write or update minimal tests (unit, integration, or e2e) that fail before implementation and pass after. Green-before-done: do not merge with failing gates.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Async-Safe, Contract-Driven Design
+Public interfaces are stable contracts. Async services must not block the event loop; wrap sync libs using thread executors when necessary. Breaking contract changes require versioned rollouts or feature flags with explicit deprecation notes.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Security by Default
+Credentials are never embedded. Cloud SQL uses IAM database authentication via the official connector (no password-based auth). Principle of least privilege for service accounts. Logs must avoid sensitive data.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. Operational Simplicity
+Prefer standard, well-supported libraries. Keep configuration in environment variables with safe defaults. Add observability (structured logs, minimal metrics) for new components that affect production behavior.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+## Technology Constraints
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+- Runtime: Python 3.11+ on Cloud Run
+- Data: Cloud SQL PostgreSQL with `pgvector`
+- Retrievers: LangChain 1.0+
+- Vector Store: `langchain-postgres` with `psycopg` (psycopg3) via SQLAlchemy 2.x
+- Connectivity: `google-cloud-sql-connector` with automatic IAM DB auth (no passwords)
+- Embeddings: Vertex AI `text-embedding-005` (or successor), configured per environment
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+## Development Workflow
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+1) Author specs (`spec.md`, `plan.md`, `tasks.md`) → review
+2) Initialize feature branch `NNN-<name>`; scaffold code and tests
+3) Implement behind a feature flag when behavior changes are user-facing
+4) Validate with unit + integration tests; capture performance baseline when relevant
+5) Staged rollout: dev → staging → production with monitoring; maintain immediate rollback
+6) Cleanup legacy code/flags after stability window
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+- This constitution supersedes ad-hoc practices. Conflicts must be resolved by adjusting specs/plans/tasks to comply. Proposals to amend principles require an explicit "Constitution Update" PR describing rationale and migration impact.
+- Code reviews must verify adherence to Spec-First, Quality Gates, Security constraints, and Tech constraints.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.0 | **Ratified**: 2025-10-25 | **Last Amended**: 2025-10-25
