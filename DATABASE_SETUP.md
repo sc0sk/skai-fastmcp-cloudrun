@@ -1,13 +1,108 @@
-# Database Service Account Setup
+# Database Setup Guide
 
 ## Overview
+
+This guide covers database setup for both **production (Cloud Run)** and **local development** environments.
 
 This project uses two specialized service accounts for database access:
 
 1. **hansard-db-admin@skai-fastmcp-cloudrun.iam** - Full ownership for schema management
 2. **hansard-db-readonly@skai-fastmcp-cloudrun.iam** - Read-only access for MCP server queries
 
-## Current Status
+## Local Testing with Cloud SQL Proxy
+
+### Prerequisites
+
+- Cloud SQL Auth Proxy binary installed ([download here](https://cloud.google.com/sql/docs/postgres/sql-proxy))
+- Database password for `postgres` user
+- GCP credentials configured: `gcloud auth application-default login`
+
+### Installation
+
+#### macOS (Homebrew)
+```bash
+brew install cloud-sql-proxy
+```
+
+#### macOS/Linux (Manual)
+```bash
+# Download v2 (recommended)
+curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.2/cloud-sql-proxy.darwin.amd64
+chmod +x cloud-sql-proxy
+mv cloud-sql-proxy /usr/local/bin/
+
+# Or download v1 (current project setup)
+curl -o cloud_sql_proxy https://dl.google.com/cloudsql/cloud_sql_proxy.darwin.amd64
+chmod +x cloud_sql_proxy
+```
+
+#### Windows
+```powershell
+# Download from: https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.2/cloud-sql-proxy.x64.exe
+# Rename to cloud-sql-proxy.exe and add to PATH
+```
+
+### Quick Start Scripts
+
+#### Start Proxy
+```bash
+./scripts/start_cloud_sql_proxy.sh
+
+# With custom port
+./scripts/start_cloud_sql_proxy.sh --port 5433
+
+# With custom instance
+./scripts/start_cloud_sql_proxy.sh --instance project:region:instance
+```
+
+The start script automatically:
+- Detects v1 (`cloud_sql_proxy`) or v2 (`cloud-sql-proxy`) binary
+- Checks for port conflicts and falls back to 5433, 5434, 5435
+- Saves PID to `.cloud_sql_proxy.pid`
+- Updates `.env` with `CLOUDSQL_PORT` if using non-default port
+
+#### Stop Proxy
+```bash
+./scripts/stop_cloud_sql_proxy.sh
+```
+
+### Configuration
+
+#### Environment Variables (`.env`)
+
+**For local development with proxy (password authentication):**
+```bash
+CLOUDSQL_USER=postgres
+DATABASE_PASSWORD=your_database_password_here
+CLOUDSQL_INSTANCE=hansard-db-v2
+CLOUDSQL_DATABASE=hansard
+GCP_PROJECT_ID=skai-fastmcp-cloudrun
+GCP_REGION=us-central1
+```
+
+**For production Cloud Run (IAM authentication):**
+```bash
+# Omit CLOUDSQL_USER and DATABASE_PASSWORD
+CLOUDSQL_INSTANCE=hansard-db-v2
+CLOUDSQL_DATABASE=hansard
+GCP_PROJECT_ID=skai-fastmcp-cloudrun
+GCP_REGION=us-central1
+```
+
+### Common Errors and Solutions
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `password authentication failed for user "postgresql"` | Wrong username | Use `CLOUDSQL_USER=postgres` (not `postgresql`) |
+| `password authentication failed for user "postgres"` | Wrong password | Check `DATABASE_PASSWORD` in `.env` |
+| `Connection refused` / `timeout` | Proxy not running | Run `./scripts/start_cloud_sql_proxy.sh` |
+| `dial tcp 127.0.0.1:5432: connect: connection refused` | Proxy crashed or stopped | Check proxy logs; restart proxy |
+| `bind: address already in use` | Port 5432 occupied | Script auto-selects 5433-5435; check console output |
+| `User does not have permission` | IAM permissions missing | Run `gcloud auth application-default login` |
+
+## Production Database Setup (Cloud Run)
+
+### Current Status
 
 ✅ Service accounts created
 ✅ Cloud SQL Client IAM role granted

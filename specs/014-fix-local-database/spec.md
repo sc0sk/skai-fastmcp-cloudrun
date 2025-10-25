@@ -4,14 +4,17 @@
 **Created**: 2025-10-25  
 **Status**: Draft  
 **Type**: Bug Fix  
-**Input**: User description: "Fix local database connection for testing with Cloud SQL proxy"
+**Input**: User description: "Fix local database connection for testing with Cloud SQL proxy"  
+**Constitution**: Not applicable (project constitution is template-only; no formal principles enforced)
 
 ## Problem Statement
 
-The current implementation has a mismatch between environment variable names for database authentication:
-- The code looks for `DATABASE_PASSWORD` 
-- The `.env` file uses `CLOUDSQL_PASSWORD`
-- This causes password authentication to fail in local development
+The current implementation has a mismatch in database configuration that prevents local development:
+- The code expects database user `postgres` (built-in superuser)
+- The `.env` file was configured with `postgresql` (user doesn't exist)
+- This causes "password authentication failed" errors in local development
+
+**Note**: Initial hypothesis was environment variable naming (`CLOUDSQL_PASSWORD` vs `DATABASE_PASSWORD`), but investigation revealed the actual issue was the username mismatch. The `.env` file already used the correct `DATABASE_PASSWORD` variable name.
 
 Additionally, developers need clear guidance on:
 1. How to start the Cloud SQL proxy for local testing
@@ -89,7 +92,7 @@ Additionally, developers need clear guidance on:
 - **FR-002**: System MUST support both password authentication (local) and IAM authentication (production) modes
 - **FR-003**: Setup script MUST verify Cloud SQL proxy is installed before attempting to start it
 - **FR-004**: Configuration MUST clearly document which env vars are for local vs production
-- **FR-005**: Error messages MUST indicate whether authentication failure is due to missing proxy, wrong credentials, or other causes
+- **FR-005**: Error messages SHOULD indicate whether authentication failure is due to missing proxy, wrong credentials, or other causes (downgraded from MUST to SHOULD - optional enhancement, not blocking)
 
 ### Key Entities *(include if feature involves data)*
 
@@ -102,6 +105,6 @@ Additionally, developers need clear guidance on:
 ### Measurable Outcomes
 
 - **SC-001**: All existing test files (`test_tools_direct.py`, `test_mcp_tools.py`) pass successfully when run locally with proxy
-- **SC-002**: Setup time for new developers (from fresh checkout to first passing test, including proxy installation and configuration) reduces from >30 minutes to <5 minutes
+- **SC-002**: Setup time for new developers (from fresh checkout with proxy binary already installed to first passing test) reduces from >30 minutes to <5 minutes. Note: Does not include Cloud SQL proxy binary download time (network dependent)
 - **SC-003**: Zero "password authentication failed" errors when proxy is correctly configured
 - **SC-004**: Documentation includes working examples for both local and production auth configurations

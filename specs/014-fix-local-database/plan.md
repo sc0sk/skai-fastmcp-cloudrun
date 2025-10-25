@@ -14,7 +14,7 @@ Fix environment variable mismatch that prevents local database connections via C
 - Python 3.12
 - Cloud SQL Python Connector (langchain-google-cloud-sql-pg)
 - PostgreSQL via Cloud SQL
-- Cloud SQL Auth Proxy (v2)
+- Cloud SQL Auth Proxy (v1) - Note: v1 is deprecated; v2 migration recommended for future
 
 **Authentication Methods**:
 1. **Password Auth** (local development): Uses username + password via proxy
@@ -24,17 +24,19 @@ Fix environment variable mismatch that prevents local database connections via C
 
 ### Phase 0: Environment Configuration Fix (P1)
 
-**Problem**: Code looks for `DATABASE_PASSWORD`, but `.env` uses `CLOUDSQL_PASSWORD`
+**Problem**: Code expects database user `postgres`, but `.env` configured with `postgresql` (doesn't exist in Cloud SQL instance)
 
-**Solution**: Standardize on `DATABASE_PASSWORD` across all files
+**Solution**: Update `CLOUDSQL_USER` to `postgres` in `.env` file
 
 **Files to Change**:
-- `.env` - Rename variable
-- `.env.example` - Update documentation
-- `src/storage/vector_store.py` - Already uses correct variable
-- `src/storage/metadata_store.py` - Already uses correct variable
+- `.env` - Change `CLOUDSQL_USER` from `postgresql` to `postgres`
+- `.env.example` - Update documentation with correct username and auth guidance
+- `src/storage/vector_store.py` - Already uses correct `DATABASE_PASSWORD` variable
+- `src/storage/metadata_store.py` - Already uses correct `DATABASE_PASSWORD` variable
 
-**Validation**: Verify both stores read password correctly
+**Note**: Investigation revealed `.env` already had correct `DATABASE_PASSWORD` variable; the issue was username mismatch, not variable naming.
+
+**Validation**: Verify both stores connect successfully with corrected username
 
 ### Phase 1: Cloud SQL Proxy Setup Script (P1)
 

@@ -49,6 +49,68 @@ Ingest new speeches into the database (admin operation)
 
 ## Quick Start
 
+### Local Development Setup
+
+#### Prerequisites
+- Python 3.11+
+- Cloud SQL Auth Proxy binary ([installation guide](https://cloud.google.com/sql/docs/postgres/sql-proxy))
+- Access to Google Cloud project with Cloud SQL instance
+
+#### Initial Setup
+
+```bash
+# Install dependencies
+uv pip install -e .
+
+# Configure environment variables
+cp .env.example .env
+# Edit .env and set:
+#   DATABASE_PASSWORD=your_database_password
+#   CLOUDSQL_USER=postgres
+#   CLOUDSQL_INSTANCE=your-instance-name
+```
+
+#### Start Cloud SQL Proxy
+
+```bash
+# Start proxy (connects to Cloud SQL via localhost:5432)
+./scripts/start_cloud_sql_proxy.sh
+
+# The script will:
+# - Detect v1 or v2 proxy binary automatically
+# - Check for port conflicts and use alternate ports if needed
+# - Save PID to .cloud_sql_proxy.pid for clean shutdown
+
+# Stop proxy when done
+./scripts/stop_cloud_sql_proxy.sh
+```
+
+#### Run Server
+
+```bash
+# Run server (OAuth bypass for local testing)
+DANGEROUSLY_OMIT_AUTH=true fastmcp dev src/server.py
+
+# Server starts on http://localhost:8000
+# MCP endpoint: http://localhost:8000/mcp/
+```
+
+### Troubleshooting Local Setup
+
+**"password authentication failed"**
+- Check that `CLOUDSQL_USER=postgres` (not `postgresql`)
+- Verify `DATABASE_PASSWORD` matches your Cloud SQL user password
+- Ensure Cloud SQL proxy is running: `ps aux | grep cloud_sql_proxy`
+
+**"Connection refused" or timeout errors**
+- Proxy not running: `./scripts/start_cloud_sql_proxy.sh`
+- Check proxy logs for connection issues
+- Verify your GCP credentials: `gcloud auth application-default login`
+
+**Port conflicts**
+- Script automatically tries ports 5433, 5434, 5435 if 5432 is occupied
+- Check selected port in console output or `.env` file (`CLOUDSQL_PORT`)
+
 ### Local Development
 
 ```bash
