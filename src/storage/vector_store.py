@@ -49,8 +49,15 @@ class VectorStoreService:
         self.region = region or os.getenv("GCP_REGION", "us-central1")
         self.instance = instance or os.getenv("CLOUDSQL_INSTANCE")
         self.database = database or os.getenv("CLOUDSQL_DATABASE", "hansard")
-        self.user = user or os.getenv("CLOUDSQL_USER")  # None for IAM auth
-        self.password = password or os.getenv("DATABASE_PASSWORD")  # None for IAM auth
+        
+        # Authentication modes:
+        # - Password auth (local dev with proxy): Set CLOUDSQL_USER=postgres
+        #   and DATABASE_PASSWORD in .env
+        # - IAM auth (Cloud Run production): Omit both variables to use
+        #   IAM service account authentication
+        # See DATABASE_SETUP.md for detailed configuration guide
+        self.user = user or os.getenv("CLOUDSQL_USER")  # None for IAM
+        self.password = password or os.getenv("DATABASE_PASSWORD")
         self.table_name = table_name
 
         # Create embedding service if not provided
