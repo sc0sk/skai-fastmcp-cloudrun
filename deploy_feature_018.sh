@@ -61,7 +61,7 @@ DEPLOY_CMD="gcloud run deploy $SERVICE_NAME \
   --memory=2Gi \
   --max-instances=10 \
   --timeout=300 \
-  --startup-cpu-boost \
+  --cpu-boost \
   --vpc-connector=hansard-vpc-connector \
   --vpc-egress=private-ranges-only \
   --add-cloudsql-instances=skai-fastmcp-cloudrun:us-central1:hansard-db-v2 \
