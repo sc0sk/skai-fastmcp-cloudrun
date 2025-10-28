@@ -28,8 +28,8 @@ DEFAULT_EMBEDDING_MODEL = "text-embedding-005"
 DEFAULT_EMBEDDING_DIMENSIONS = 768
 
 # Vector backend selection (feature-flagged rollout)
-# options: "legacy" (google wrapper), "postgres" (langchain-postgres)
-DEFAULT_VECTOR_BACKEND = "legacy"
+# options: "postgres" (langchain-postgres with LangChain 1.0)
+DEFAULT_VECTOR_BACKEND = "postgres"
 DEFAULT_PGVECTOR_COLLECTION = "hansard"
 
 # Environment variable getters

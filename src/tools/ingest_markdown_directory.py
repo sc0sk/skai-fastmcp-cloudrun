@@ -8,7 +8,7 @@ Feature 013: Bulk Markdown Directory Ingestion
 """
 import os
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, cast
 from fastmcp import Context
 
 from tools.ingest_markdown_file import ingest_markdown_file
@@ -122,32 +122,45 @@ async def ingest_markdown_directory(
     
     for idx, file_path in enumerate(files, 1):
         try:
+            # The `request` object needs to be passed to `ingest_markdown_file`
+            # for authorization. We'll construct a mock request if `ctx` is available.
+            request: Dict[str, Any] = {}
+            if ctx:
+                candidate = getattr(ctx, "request", None)
+                if isinstance(candidate, dict):
+                    request = cast(Dict[str, Any], candidate)
+
             result = await ingest_markdown_file(
                 file_path=str(file_path),
+                request=request,
                 duplicate_policy=duplicate_policy,
                 validate_path=validate_path,
-                ctx=ctx
+                ctx=ctx,
             )
             
-            file_result = {
+            file_result: Dict[str, Any] = {
                 "file_name": file_path.name,
-                "status": result["status"],
-                "speech_id": result["speech_id"],
-                "chunks_created": result["chunks_created"]
+                "status": result.get("status", "unknown"),
+                "speech_id": result.get("speech_id"),
+                "chunks_created": result.get("chunks_ingested", 0)
             }
             successful_files.append(file_result)
             
-            if result["status"] == "skipped":
+            if result.get("status") == "skipped":
                 skipped_count += 1
             else:
-                total_chunks += result["chunks_created"]
+                total_chunks += result.get("chunks_ingested", 0)
                 
         except Exception as e:
+            error_detail = str(e)
+            if hasattr(e, "detail"):
+                error_detail = str(getattr(e, "detail"))
+
             failed_files.append({
                 "file_name": file_path.name,
                 "status": "failed",
                 "error_type": type(e).__name__,
-                "error_message": str(e)
+                "error_message": error_detail
             })
         
         # Report progress

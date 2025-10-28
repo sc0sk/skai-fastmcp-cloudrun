@@ -152,21 +152,91 @@ class CloudSQLEngine:
             handling IAM token refresh automatically.
             
             Returns:
-                psycopg.Connection: Active database connection
+                psycopg.Connection: Active database connection (IAM-authenticated)
+            
+            Important: Cloud SQL Connector v1.18+ only supports pg8000 driver
+            for IAM Database Authentication. Use driver='pg8000' with
+            enable_iam_auth=True for this authentication method.
             """
-            # Use psycopg3 via connector; enable IAM auth if no user/pass
+            import os
+            
+            # pg8000 driver expects "db" parameter, not "dbname"
             kwargs = {"db": self._database}
+            
             if self._user and self._password:
                 # Password authentication (not recommended for production)
+                # This uses the standard PostgreSQL password auth (md5/scram)
                 kwargs["user"] = self._user
                 kwargs["password"] = self._password
+                driver = "pg8000"
             else:
-                # IAM DB Auth (recommended: no password storage)
+                # IAM DB Auth (recommended: no password storage, automatic token refresh)
                 # Connector will automatically fetch and refresh IAM tokens
-                kwargs["enable_iam_auth"] = True
+                # Only pg8000 driver supports this with Cloud SQL Connector v1.18+
+                import google.auth
+
+                # Get the IAM user (service account email)
+                iam_user = None
+
+                # Try getting from default credentials (works in Cloud Run)
+                try:
+                    credentials, project = google.auth.default()
+                    # Service account credentials have service_account_email
+                    if hasattr(credentials, 'service_account_email'):
+                        iam_user = credentials.service_account_email
+                    elif hasattr(credentials, '_service_account_email'):
+                        iam_user = credentials._service_account_email
+                    # For user credentials, prefer the service account if we can
+                    # detect it from the environment
+                    elif hasattr(credentials, 'service_account_email'):
+                        iam_user = credentials.service_account_email
+                except Exception:
+                    pass
+
+                # If still no user, check environment variable (Cloud Run sets this)
+                if not iam_user:
+                    # In Cloud Run, service account is available via metadata
+                    # We can also check K_SERVICE env var to detect Cloud Run
+                    if os.getenv('K_SERVICE'):  # Running in Cloud Run
+                        try:
+                            import requests
+                            metadata_url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email"
+                            headers = {"Metadata-Flavor": "Google"}
+                            response = requests.get(metadata_url, headers=headers, timeout=1)
+                            if response.status_code == 200:
+                                iam_user = response.text.strip()
+                        except Exception:
+                            pass
+
+                # Last resort: try gcloud config (local development)
+                if not iam_user:
+                    import subprocess
+                    try:
+                        result = subprocess.check_output(
+                            ['gcloud', 'config', 'get-value', 'account'],
+                            text=True,
+                            stderr=subprocess.DEVNULL
+                        ).strip()
+                        if result and '@' in result:
+                            iam_user = result
+                    except Exception:
+                        pass
+
+                # Final fallback: use postgres user (legacy default, requires password)
+                if not iam_user:
+                    iam_user = "postgres"
+
+                # For Cloud SQL IAM DB Auth with PostgreSQL:
+                # - Database user must be the full IAM principal email (service account)
+                # - enable_iam_auth=True enables pg8000 to use IAM tokens instead of passwords
+                # - Driver must be pg8000 (only driver supporting IAM with connector v1.18)
+                kwargs["user"] = iam_user
+                kwargs["enable_iam_auth"] = "true"  # pg8000 connector expects string "true"
+                driver = "pg8000"
+            
             return self._connector.connect(
                 self._instance_conn_name,
-                driver="psycopg",  # psycopg3 driver
+                driver=driver,  # pg8000 is the only driver supporting IAM auth
                 **kwargs,
             )
 
@@ -174,7 +244,7 @@ class CloudSQLEngine:
         # "postgresql+psycopg://" tells SQLAlchemy to use psycopg3 dialect
         # The creator function bypasses standard connection URL parsing
         self._engine: Engine = create_engine(
-            "postgresql+psycopg://",
+            "postgresql+pg8000://",
             creator=getconn,  # type: ignore[arg-type]
             pool_size=pool_size,
             max_overflow=max_overflow,

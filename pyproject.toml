@@ -5,15 +5,15 @@ description = "FastMCP server for Australian Hansard RAG with ChatGPT Developer 
 requires-python = ">=3.11"
 dependencies = [
     "fastmcp>=2.12.5",
-    "langchain>=0.3.0",
-    "langchain-text-splitters>=0.3.0",
+    "langchain>=1.0.0,<2.0.0",
+    "langchain-text-splitters>=1.0.0",
     "langchain-google-vertexai>=2.0.0",
     # Temporary: keep wrapper until new backend is fully wired, then remove
-    "langchain-google-cloud-sql-pg>=0.14.0",
     # New vector backend dependencies (016-langchain-postgres-upgrade)
     "langchain-postgres>=0.0.12",
     "sqlalchemy>=2.0.0",
-    "cloud-sql-python-connector[pg]>=1.4.0",
+    "cloud-sql-python-connector[pg8000]>=1.4.0",
+    "pg8000>=1.30.0",  # Required for Cloud SQL Connector pg8000 driver
     "psycopg[binary]>=3.1,<3.3",  # Pinned to minor version range for stability
     "pgvector>=0.3.0",
     "langgraph",
@@ -23,9 +23,11 @@ dependencies = [
     "PyJWT[crypto]>=2.8.0",
     "cryptography>=41.0.0",
     "httpx>=0.25.0",
+    "requests>=2.31.0",  # Used for Cloud Run metadata service
     "google-cloud-secret-manager>=2.16.0",
     "python-dotenv>=1.0.0",
     "python-frontmatter>=1.0.0",
+    "fastapi>=0.111.0",
 ]
 
 [project.optional-dependencies]
@@ -52,6 +54,7 @@ markers = [
     "unit: Unit tests",
     "integration: Integration tests",
     "slow: Slow running tests",
+    "manual: Manual tests that require user interaction",
 ]
 
 [tool.coverage.run]

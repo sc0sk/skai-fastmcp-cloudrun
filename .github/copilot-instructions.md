@@ -1,6 +1,6 @@
 # skai-fastmcp-cloudrun Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2025-10-24
+Auto-generated from all feature plans. Last updated: 2025-10-27
 
 ## Active Technologies
 - Existing Cloud SQL PostgreSQL (via Feature 012 ingest_markdown_file tool) (013-bulk-markdown-ingestion)
@@ -12,6 +12,7 @@ Auto-generated from all feature plans. Last updated: 2025-10-24
 - LangChain 1.0+ vector store via langchain-postgres (PGVector) with psycopg3 driver (postgresql+psycopg://) (016-langchain-postgres-upgrade)
 - SQLAlchemy 2.x engine using google-cloud-sql-connector (automatic IAM DB auth) (016-langchain-postgres-upgrade)
 - Python 3.11+ (Cloud Run compatibility requirement) + FastMCP 2.14.0+, pathlib (stdlib), glob patterns (013-bulk-markdown-ingestion)
+- AsyncIO-aware MCP testing framework + comprehensive docstring standards with "Returns" sections (018-mcp-tools-quality-improvements)
 
 ## Project Structure
 
@@ -35,6 +36,7 @@ Python 3.11+ (Cloud Run compatibility requirement): Follow standard conventions
 - 013-bulk-markdown-ingestion: Added Python 3.11+ (Cloud Run compatibility requirement) + FastMCP 2.14.0+, pathlib (stdlib), glob patterns
  - 016-langchain-postgres-upgrade: Replace langchain-google-cloud-sql-pg with langchain-postgres (dedicated package); migrate to psycopg3 driver and SQLAlchemy 2 with Cloud SQL connector (IAM auth)
  - 016-langchain-postgres-upgrade: Adopt PGVector standard schema (langchain_pg_collection, langchain_pg_embedding); use collection_name and JSONB metadata
+ - 018-mcp-tools-quality-improvements: Enhanced MCP tool docstrings with "Returns" sections; implemented async-aware testing framework to eliminate coroutine warnings; improved best practices compliance from 0.39/1.00 to target 0.80/1.00
 
 
 <!-- MANUAL ADDITIONS START -->

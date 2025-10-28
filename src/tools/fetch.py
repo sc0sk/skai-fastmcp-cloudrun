@@ -5,17 +5,17 @@ This tool combines:
 - Direct database retrieval from PostgreSQL metadata store
 """
 
+from typing import Annotated
 from pydantic import Field
 from fastmcp.tools.tool import ToolAnnotations
 
-from storage.metadata_store import get_default_metadata_store
+from src.storage.metadata_store import get_default_metadata_store
 
 
 async def fetch_hansard_speech(
-    speech_id: str = Field(
-        ...,
+    speech_id: Annotated[str, Field(
         description="Unique identifier for the speech, obtained from search_hansard_speeches results"
-    ),
+    )],
 ) -> dict:
     """Fetch the complete text of a specific parliamentary speech by ID.
 

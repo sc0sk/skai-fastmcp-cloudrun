@@ -2,6 +2,9 @@
 
 FastMCP server for Australian parliamentary speech search, optimized for ChatGPT Developer Mode.
 
+**Live Site**: https://mcp.simonkennedymp.com.au (GitHub OAuth required)  
+**Latest Feature**: Feature 018 - MCP Tools Quality Improvements (Best Practices Score: 0.80/1.00)
+
 ## Features
 
 ### ChatGPT Developer Mode Optimizations
@@ -14,6 +17,8 @@ This MCP server includes comprehensive enhancements for optimal ChatGPT integrat
 ✅ **ISO 8601 Dates** - Standardized date format with pattern validation
 ✅ **Tool Selection Guidance** - Explicit prioritization over built-in capabilities
 ✅ **Workflow Documentation** - Multi-tool operation guidance (search → fetch)
+✅ **Complete Documentation** - Returns sections with response schemas (Feature 018)
+✅ **GitHub OAuth** - Secure authentication on production deployment
 
 ### Available Tools
 
@@ -28,6 +33,10 @@ Search Simon Kennedy's parliamentary speeches (64 speeches, 2024-2025)
 - `end_date` (ISO 8601): YYYY-MM-DD format
 - `limit` (integer): 1-100, default 10
 
+**Returns**: 
+- `results`: List of matching speeches with id, speaker, date, relevance_score, preview
+- `metadata`: Total found count and original query
+
 **Annotations**: `readOnlyHint: true`
 
 #### 📄 fetch_hansard_speech
@@ -35,6 +44,10 @@ Fetch complete text of a specific speech by ID
 
 **Parameters**:
 - `speech_id` (string): Unique identifier from search results
+
+**Returns**:
+- `speech`: Complete speech data (id, speaker, date, full text)
+- `error`: Optional error message if speech not found
 
 **Annotations**: `readOnlyHint: true`, `idempotentHint: true`
 

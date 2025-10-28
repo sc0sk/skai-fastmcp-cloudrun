@@ -23,7 +23,7 @@ steps:
       - 'push'
       - 'gcr.io/$PROJECT_ID/hansard-mcp:latest'
 
-  # Deploy to Cloud Run
+  # Deploy to Cloud Run with OAuth authentication enabled
   - name: 'gcr.io/cloud-builders/gcloud'
     args:
       - 'run'
@@ -32,8 +32,18 @@ steps:
       - '--image=gcr.io/$PROJECT_ID/hansard-mcp:$SHORT_SHA'
       - '--region=us-central1'
       - '--platform=managed'
-      - '--allow-unauthenticated'
-      - '--set-env-vars=PYTHONPATH=/app/src'
+      - '--no-allow-unauthenticated'
+      - '--set-env-vars=PYTHONPATH=/app/src,FASTMCP_SERVER_AUTH=fastmcp.server.auth.providers.github.GitHubProvider,FASTMCP_SERVER_AUTH_GITHUB_BASE_URL=https://mcp.simonkennedymp.com.au'
+      - '--set-secrets=FASTMCP_SERVER_AUTH_GITHUB_CLIENT_ID=github-oauth-client-id:latest,FASTMCP_SERVER_AUTH_GITHUB_CLIENT_SECRET=github-oauth-client-secret:latest'
+      - '--cpu=2'
+      - '--memory=2Gi'
+      - '--max-instances=10'
+      - '--timeout=300'
+      - '--startup-cpu-boost'
+      - '--vpc-connector=hansard-vpc-connector'
+      - '--vpc-egress=private-ranges-only'
+      - '--add-cloudsql-instances=skai-fastmcp-cloudrun:us-central1:hansard-db-v2'
+      - '--service-account=666924716777-compute@developer.gserviceaccount.com'
 
 # Store images in Google Container Registry
 images:

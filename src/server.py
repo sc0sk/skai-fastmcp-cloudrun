@@ -27,8 +27,8 @@ async def lifespan(app: FastMCP):
     print("🚀 FastMCP Hansard RAG Server starting...")
     print("🔄 Warming up database connections and embedding models...")
 
-    from storage.metadata_store import get_default_metadata_store
-    from storage.vector_store import get_default_vector_store
+    from src.storage.metadata_store import get_default_metadata_store
+    from src.storage.vector_store import get_default_vector_store
 
     # Pre-initialize vector store (triggers DB + embedding model initialization)
     try:
@@ -52,8 +52,8 @@ async def lifespan(app: FastMCP):
 
     # Shutdown: Clean up resources
     print("🛑 FastMCP Hansard RAG Server shutting down...")
-    from storage.metadata_store import _default_metadata_store
-    from storage.vector_store import _default_vector_store
+    from src.storage.metadata_store import _default_metadata_store
+    from src.storage.vector_store import _default_vector_store
 
     if _default_metadata_store:
         await _default_metadata_store.close()
@@ -61,12 +61,13 @@ async def lifespan(app: FastMCP):
     if _default_vector_store:
         await _default_vector_store.close()
 
-# Import tool functions (relative imports for FastMCP)
-from tools.search import search_hansard_speeches, SEARCH_TOOL_METADATA
-from tools.fetch import fetch_hansard_speech, FETCH_TOOL_METADATA
-from tools.ingest import ingest_hansard_speech, INGEST_TOOL_METADATA
-from tools.ingest_markdown_file import ingest_markdown_file
-from tools.ingest_markdown_directory import ingest_markdown_directory
+# Import tool functions (using src. prefix for correct imports)
+from src.tools.search import search_hansard_speeches, SEARCH_TOOL_METADATA
+from src.tools.fetch import fetch_hansard_speech, FETCH_TOOL_METADATA
+from src.tools.ingest import ingest_hansard_speech, INGEST_TOOL_METADATA
+# TODO: Re-enable when markdown ingestion tools are fixed
+# from src.tools.ingest_markdown_file import ingest_markdown_file
+# from src.tools.ingest_markdown_directory import ingest_markdown_directory
 
 # GitHub OAuth configuration
 # See: https://docs.fastmcp.com/servers/auth/github
@@ -126,35 +127,36 @@ mcp.tool(
     }
 )(ingest_hansard_speech)
 
-# Register markdown file ingestion tool (admin-only)
-mcp.tool(
-    name="ingest_markdown_file",
-    exclude_args=["ctx"],
-    annotations={
-        "destructiveHint": True,  # Write operation
-        "requiresAuth": True,  # Admin authentication required
-        "requiredRole": "admin"
-    }
-)(ingest_markdown_file)
-
-# Register bulk markdown directory ingestion tool (admin-only)
-mcp.tool(
-    name="ingest_markdown_directory",
-    exclude_args=["ctx"],
-    annotations={
-        "destructiveHint": True,  # Write operation
-        "requiresAuth": True,  # Admin authentication required
-        "requiredRole": "admin"
-    }
-)(ingest_markdown_directory)
+# TODO: Re-enable when markdown ingestion tools are fixed
+# # Register markdown file ingestion tool (admin-only)
+# mcp.tool(
+#     name="ingest_markdown_file",
+#     exclude_args=["ctx"],
+#     annotations={
+#         "destructiveHint": True,  # Write operation
+#         "requiresAuth": True,  # Admin authentication required
+#         "requiredRole": "admin"
+#     }
+# )(ingest_markdown_file)
+# 
+# # Register bulk markdown directory ingestion tool (admin-only)
+# mcp.tool(
+#     name="ingest_markdown_directory",
+#     exclude_args=["ctx"],
+#     annotations={
+#         "destructiveHint": True,  # Write operation
+#         "requiresAuth": True,  # Admin authentication required
+#         "requiredRole": "admin"
+#     }
+# )(ingest_markdown_directory)
 
 # Print startup message
 print("✅ Hansard MCP Server initialized with ChatGPT Developer Mode enhancements")
 print("   🔍 search_hansard_speeches [read-only]")
 print("   📄 fetch_hansard_speech [read-only]")
 print("   📝 ingest_hansard_speech [write operation with progress reporting]")
-print("   📂 ingest_markdown_file [admin-only markdown ingestion]")
-print("   📁 ingest_markdown_directory [admin-only bulk directory ingestion]")
+# print("   📂 ingest_markdown_file [admin-only markdown ingestion]")
+# print("   📁 ingest_markdown_directory [admin-only bulk directory ingestion]")
 
 # Expose ASGI app for uvicorn (Cloud Run deployment)
 # FastMCP's http_app() method returns the Starlette ASGI application

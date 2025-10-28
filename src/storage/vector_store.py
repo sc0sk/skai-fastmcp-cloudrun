@@ -1,19 +1,12 @@
-"""PostgreSQL vector store using LangChain PostgresVectorStore with pgvector.
+"""PostgreSQL vector store using LangChain 1.0 with langchain-postgres.
 
-Legacy implementation uses langchain_google_cloud_sql_pg. A new backend based on
-langchain-postgres can be selected via VECTOR_BACKEND=postgres.
+This module provides vector storage via langchain-postgres PGVector backend.
 """
 
-from langchain_google_cloud_sql_pg import PostgresVectorStore, PostgresEngine
-from langchain_google_vertexai import VertexAIEmbeddings
 from typing import List, Optional, Dict, Any
 import os
-import asyncio
-from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastmcp import Context
-from config import VECTOR_TABLE_NAME
-from src import config as app_config
 
 try:
     # Optional import; only required if VECTOR_BACKEND=postgres
@@ -25,323 +18,16 @@ except Exception:  # pragma: no cover - optional dependency path
 load_dotenv()
 
 
-class VectorStoreService:
-    """Service for managing speech chunks in PostgreSQL with pgvector."""
-
-    def __init__(
-        self,
-        project_id: str = None,
-        region: str = None,
-        instance: str = None,
-        database: str = None,
-        user: str = None,
-        password: str = None,
-        embedding_service: Any = None,
-        table_name: str = VECTOR_TABLE_NAME,
-    ):
-        """
-        Initialize PostgreSQL vector store with Cloud SQL connection.
-
-        Args:
-            project_id: GCP project ID (defaults to GCP_PROJECT_ID env var)
-            region: Cloud SQL region (defaults to GCP_REGION env var)
-            instance: Cloud SQL instance name (defaults to CLOUDSQL_INSTANCE env var)
-            database: Database name (defaults to CLOUDSQL_DATABASE env var)
-            user: Database user (defaults to CLOUDSQL_USER env var)
-            password: Database password (defaults to DATABASE_PASSWORD env var, None for IAM)
-            embedding_service: VertexAIEmbeddings instance (auto-created if None)
-            table_name: Vector table name (default: speech_chunks)
-
-        Note:
-            Uses Cloud SQL Python Connector. Provide both user and password for basic auth,
-            or neither for IAM authentication.
-        """
-        self.project_id = project_id or os.getenv("GCP_PROJECT_ID")
-        self.region = region or os.getenv("GCP_REGION", "us-central1")
-        self.instance = instance or os.getenv("CLOUDSQL_INSTANCE")
-        self.database = database or os.getenv("CLOUDSQL_DATABASE", "hansard")
-        self.user = user or os.getenv("CLOUDSQL_USER")  # None for IAM auth
-        self.password = password or os.getenv("DATABASE_PASSWORD")  # None for IAM auth
-        self.table_name = table_name
-
-        # Create embedding service if not provided
-        if embedding_service is None:
-            from src.storage.embeddings import LangChainEmbeddingsWrapper
-            # Use wrapper directly for LangChain PostgresVectorStore compatibility
-            self.embeddings = LangChainEmbeddingsWrapper(
-                project_id=self.project_id,
-                location=os.getenv("VERTEX_AI_LOCATION", "us-central1"),
-                model_name="text-embedding-005",
-                output_dimensionality=768
-            )
-        else:
-            # If provided a custom EmbeddingService, extract wrapper if available
-            if hasattr(embedding_service, 'embeddings'):
-                self.embeddings = embedding_service.embeddings
-            else:
-                self.embeddings = embedding_service
-
-        # Store for lazy initialization
-        self._vector_store: Optional[PostgresVectorStore] = None
-
-    async def _get_vector_store(self) -> PostgresVectorStore:
-        """
-        Lazy initialization of PostgresVectorStore.
-
-        Returns:
-            Initialized PostgresVectorStore instance
-
-        Note:
-            Uses LangChain's default table structure with auto-initialization.
-            Table is created automatically with proper schema if it doesn't exist.
-        """
-        if self._vector_store is None:
-            # Determine auth method - for IAM auth, both user and password must be None
-            # If only one is set, force both to None for IAM auth
-            use_user = self.user if (self.user and self.password) else None
-            use_password = self.password if (self.user and self.password) else None
-
-            # Create PostgresEngine for Cloud SQL connection
-            engine = await PostgresEngine.afrom_instance(
-                project_id=self.project_id,
-                region=self.region,
-                instance=self.instance,
-                database=self.database,
-                user=use_user,
-                password=use_password,
-            )
-
-            # Skip table initialization - table should be pre-created with proper schema
-            # This avoids permission issues where the runtime user (fastmcp-server)
-            # doesn't have CREATE TABLE privileges. The table should be created by
-            # an admin user (e.g., via scripts/init_langchain_schema.py).
-            #
-            # If the table doesn't exist, PostgresVectorStore.create() will fail
-            # with a clear error message that the table needs to be created first.
-
-            # Create PostgresVectorStore with LangChain defaults
-            # This uses standard column names that match the initialized table
-            self._vector_store = await PostgresVectorStore.create(
-                engine=engine,
-                table_name=self.table_name,
-                embedding_service=self.embeddings,
-            )
-
-        return self._vector_store
-
-    async def add_chunks(
-        self,
-        texts: List[str],
-        metadatas: List[Dict[str, Any]],
-        speech_id: str,
-        ctx: Optional[Context] = None,  # Progress reporting context
-    ) -> List[str]:
-        """
-        Add speech chunks to vector store with embeddings.
-
-        Args:
-            texts: List of chunk texts
-            metadatas: List of metadata dicts (one per chunk)
-            speech_id: Parent speech ID (UUID)
-            ctx: Optional FastMCP Context for progress reporting
-
-        Returns:
-            List of generated chunk IDs
-
-        Example:
-            >>> store = VectorStoreService()
-            >>> chunks = ["Chunk 1 text...", "Chunk 2 text..."]
-            >>> metadata = [
-            ...     {"speech_id": "123", "chunk_index": 0, "speaker": "Kennedy"},
-            ...     {"speech_id": "123", "chunk_index": 1, "speaker": "Kennedy"}
-            ... ]
-            >>> chunk_ids = await store.add_chunks(chunks, metadata, "123")
-            >>> len(chunk_ids) == 2
-            True
-        """
-        if not texts:
-            return []
-
-        if len(texts) != len(metadatas):
-            raise ValueError("texts and metadatas must have same length")
-
-        # Add speech_id to all metadata dicts and ensure date is a date object
-        from datetime import date, datetime
-        for meta in metadatas:
-            meta["speech_id"] = speech_id
-
-            # Convert date string to date object if needed
-            if "date" in meta and isinstance(meta["date"], str):
-                meta["date"] = datetime.fromisoformat(meta["date"]).date()
-
-        vector_store = await self._get_vector_store()
-
-        # Progress tracking for embedding stage (40-70%)
-        if ctx:
-            total_chunks = len(texts)
-            last_reported_progress = 40.0  # Start of embedding stage
-
-        # Add documents with embeddings (LangChain handles embedding generation)
-        # Note: LangChain's aadd_texts is a batch operation, so we can't report
-        # progress per chunk. Instead, we report at the start and end of embedding.
-        if ctx:
-            await ctx.report_progress(40, 100)  # Start of embedding stage
-
-        chunk_ids = await vector_store.aadd_texts(
-            texts=texts,
-            metadatas=metadatas,
-        )
-
-        # Report completion of embedding stage
-        if ctx:
-            await ctx.report_progress(70, 100)  # End of embedding stage
-
-        return chunk_ids
-
-    async def similarity_search(
-        self,
-        query: str,
-        k: int = 10,
-        filter: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
-        """
-        Search for similar chunks using vector similarity.
-
-        Args:
-            query: Search query text
-            k: Number of results to return (default: 10)
-            filter: Optional metadata filter dict
-
-        Returns:
-            List of dicts with keys: chunk_id, chunk_text, score, metadata
-
-        Example:
-            >>> store = VectorStoreService()
-            >>> results = await store.similarity_search(
-            ...     query="climate change policy",
-            ...     k=5,
-            ...     filter={"chamber": "House of Representatives"}
-            ... )
-            >>> len(results) <= 5
-            True
-        """
-        vector_store = await self._get_vector_store()
-
-        # Perform similarity search with optional filter
-        docs_with_scores = await vector_store.asimilarity_search_with_score(
-            query=query,
-            k=k,
-            filter=filter,
-        )
-
-        # Format results
-        # With LangChain defaults, metadata is stored in doc.metadata
-        results = []
-        for doc, score in docs_with_scores:
-            results.append({
-                "chunk_id": doc.id if hasattr(doc, 'id') else None,
-                "chunk_text": doc.page_content,
-                "score": float(score),
-                "metadata": doc.metadata,
-            })
-
-        return results
-
-    async def hybrid_search(
-        self,
-        query: str,
-        k: int = 10,
-        filter: Optional[Dict[str, Any]] = None,
-        keyword_weight: float = 0.3,
-        vector_weight: float = 0.7,
-    ) -> List[Dict[str, Any]]:
-        """
-        Hybrid search combining vector similarity and keyword matching.
-
-        Args:
-            query: Search query text
-            k: Number of results to return (default: 10)
-            filter: Optional metadata filter dict
-            keyword_weight: Weight for keyword score (default: 0.3)
-            vector_weight: Weight for vector score (default: 0.7)
-
-        Returns:
-            List of dicts with combined scores
-
-        Note:
-            Uses pgvector's <=> operator for vector similarity
-            Uses PostgreSQL full-text search for keyword matching
-        """
-        # TODO: Implement hybrid search in Phase 4
-        # For now, fall back to vector-only search
-        return await self.similarity_search(query=query, k=k, filter=filter)
-
-    async def delete_by_speech_id(self, speech_id: str) -> int:
-        """
-        Delete all chunks for a given speech.
-
-        Args:
-            speech_id: Speech UUID to delete
-
-        Returns:
-            Number of chunks deleted
-
-        Example:
-            >>> store = VectorStoreService()
-            >>> deleted = await store.delete_by_speech_id("speech-123")
-            >>> deleted >= 0
-            True
-        """
-        vector_store = await self._get_vector_store()
-
-        # Delete by metadata filter
-        deleted = await vector_store.adelete(
-            filter={"speech_id": speech_id}
-        )
-
-        return deleted
-
-    async def get_stats(self) -> Dict[str, Any]:
-        """
-        Get vector store statistics.
-
-        Returns:
-            Dict with chunk_count, unique_speeches, avg_chunks_per_speech
-
-        Example:
-            >>> store = VectorStoreService()
-            >>> stats = await store.get_stats()
-            >>> "chunk_count" in stats
-            True
-        """
-        # TODO: Implement stats query
-        # For now, return placeholder
-        return {
-            "chunk_count": 0,
-            "unique_speeches": 0,
-            "avg_chunks_per_speech": 0.0,
-        }
-
-    async def close(self):
-        """Close vector store connection."""
-        if self._vector_store:
-            # LangChain PostgresVectorStore handles cleanup
-            self._vector_store = None
-
-
 # Singleton instance with default configuration
-_default_vector_store: Optional[VectorStoreService] = None
+_default_vector_store: Optional["_PostgresVectorFacade"] = None
 
 
-async def get_default_vector_store() -> VectorStoreService:
+async def get_default_vector_store() -> "_PostgresVectorFacade":
     """
     Get or create default vector store instance.
 
     Returns:
-        Singleton VectorStoreService instance
-
-    Raises:
-        ValueError: If VECTOR_BACKEND has invalid value
+        Singleton _PostgresVectorFacade instance
 
     Example:
         >>> from src.storage.vector_store import get_default_vector_store
@@ -350,31 +36,13 @@ async def get_default_vector_store() -> VectorStoreService:
     """
     global _default_vector_store
 
-    backend = app_config.get_vector_backend()
-    
-    # Validate backend value (fail-fast for safety)
-    valid_backends = ["legacy", "postgres"]
-    if backend not in valid_backends:
-        raise ValueError(
-            f"Invalid VECTOR_BACKEND value: '{backend}'. "
-            f"Must be one of: {', '.join(valid_backends)}. "
-            f"Set VECTOR_BACKEND environment variable to 'legacy' or 'postgres'."
-        )
-    
-    if backend == "postgres":
-        # Lazy-init facade to new langchain-postgres backend
-        if _default_vector_store is None or not isinstance(_default_vector_store, _PostgresVectorFacade):
-            _default_vector_store = _PostgresVectorFacade()
-        return _default_vector_store
-
-    # backend == "legacy"
     if _default_vector_store is None:
-        _default_vector_store = VectorStoreService()
+        _default_vector_store = _PostgresVectorFacade()
     return _default_vector_store
 
 
 class _PostgresVectorFacade:
-    """Facade implementing VectorStoreService-like API on top of new backend.
+    """Facade implementing VectorStoreService-like API on top of langchain-postgres backend.
 
     Note: This defers actual PGVector initialization until first use.
     """
@@ -388,9 +56,15 @@ class _PostgresVectorFacade:
                 raise RuntimeError(
                     "langchain-postgres backend requested but not available"
                 )
-            # Connection will be provided via environment/engine in a later phase.
-            # For now, rely on default constructor; this path is gated by env flag.
-            self._store = _PGStore(connection=None)  # type: ignore[arg-type]
+            # Connection will be provided via environment/engine.
+            self._store = _PGStore(
+                project_id=os.getenv("GCP_PROJECT_ID"),
+                region=os.getenv("GCP_REGION"),
+                instance=os.getenv("CLOUDSQL_INSTANCE"),
+                database=os.getenv("CLOUDSQL_DATABASE"),
+                user=None,  # Use IAM Auth
+                password=None, # Use IAM Auth
+            )
 
     async def add_chunks(
         self,

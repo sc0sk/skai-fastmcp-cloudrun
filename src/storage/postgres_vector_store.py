@@ -226,6 +226,12 @@ class PostgresVectorStoreService:
     def __init__(
         self,
         *,
+        project_id: str | None = None,
+        region: str | None = None,
+        instance: str | None = None,
+        database: str | None = None,
+        user: str | None = None,
+        password: str | None = None,
         connection: str | None = None,
         collection_name: str | None = None,
         embedding_service: Any | None = None,
@@ -234,10 +240,16 @@ class PostgresVectorStoreService:
         """Initialize PostgresVectorStoreService.
         
         Args:
-            connection: SQLAlchemy engine or connection string
+            project_id: GCP project ID (for Cloud SQL connection)
+            region: Cloud SQL region (for Cloud SQL connection)
+            instance: Cloud SQL instance name (for Cloud SQL connection)
+            database: Database name (for Cloud SQL connection)
+            user: Database user (None for IAM auth)
+            password: Database password (None for IAM auth)
+            connection: SQLAlchemy engine or connection string (alternative to Cloud SQL params)
                 - Recommended: Pass CloudSQLEngine.engine for IAM auth
                 - Alternative: "postgresql+psycopg://user:pass@host/db"
-                - If None, will fail (connection required)
+                - If None, will create from project_id/region/instance/database
             collection_name: Namespace for vector storage (multi-tenancy)
                 - Defaults to PGVECTOR_COLLECTION_NAME from config
                 - Used to scope vectors (e.g., "hansard_speeches")
@@ -250,7 +262,7 @@ class PostgresVectorStoreService:
         
         Raises:
             ImportError: If langchain-postgres not installed
-            ValueError: If connection is None or invalid
+            ValueError: If connection is None and Cloud SQL params not provided
             RuntimeError: If pgvector extension not enabled in database
         
         Example:
@@ -264,6 +276,23 @@ class PostgresVectorStoreService:
             ...     collection_name="hansard_speeches",
             ... )
         """
+        # Create Cloud SQL engine if connection not provided
+        if connection is None:
+            if not all([project_id, region, instance, database]):
+                raise ValueError(
+                    "Either connection or all of (project_id, region, instance, database) must be provided"
+                )
+            from src.storage.cloud_sql_engine import CloudSQLEngine
+            engine_mgr = CloudSQLEngine(
+                project_id=project_id,  # type: ignore[arg-type]
+                region=region,  # type: ignore[arg-type]
+                instance=instance,  # type: ignore[arg-type]
+                database=database,  # type: ignore[arg-type]
+                user=user,
+                password=password,
+            )
+            connection = engine_mgr.engine
+        
         self.collection_name = (
             collection_name or config.get_pgvector_collection()
         )

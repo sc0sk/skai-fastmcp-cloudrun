@@ -1,59 +1,73 @@
 #!/usr/bin/env python3
-"""Drop and recreate langchain_vector_store table with correct schema."""
+"""Drop and recreate speeches table with TEXT speech_id, then re-ingest data."""
 
 import asyncio
-from langchain_google_cloud_sql_pg import PostgresEngine
+from sqlalchemy import text
+from src.storage.metadata_store import get_default_metadata_store
 
 
 async def recreate_table():
-    """Drop and recreate the table with correct schema."""
-    # Connection parameters
-    project_id = "skai-fastmcp-cloudrun"
-    region = "us-central1"
-    instance = "hansard-db-v2"
-    database = "hansard"
-    table_name = "langchain_vector_store"
-
-    print(f"🔧 Recreating table: {table_name}")
-    print(f"   Instance: {instance}")
-    print(f"   Database: {database}\n")
-
-    # Create engine
-    engine = await PostgresEngine.afrom_instance(
-        project_id=project_id,
-        region=region,
-        instance=instance,
-        database=database
-    )
-
-    # Drop existing table using SQL directly via the pool
-    print(f"⚠️  Dropping existing table...")
-    try:
-        async with engine._pool.connect() as conn:
-            await conn.execute(f"DROP TABLE IF EXISTS {table_name} CASCADE")
-            await conn.commit()
-        print(f"✅ Table dropped successfully")
-    except Exception as e:
-        print(f"❌ Error dropping table: {e}")
-        print(f"   Attempting to continue anyway...")
-
-
-    # Recreate table with correct schema
-    print(f"\n🔧 Creating table with correct schema...")
-    try:
-        await engine.ainit_vectorstore_table(
-            table_name=table_name,
-            vector_size=768
-        )
-        print(f"✅ Table created successfully!")
-    except Exception as e:
-        print(f"❌ Error creating table: {e}")
-        return
-
-    # Verify table schema
-    print(f"\n✅ Done! You can now run populate_hansard_speeches.py")
-
-    await engine.close()
+    """Drop and recreate speeches table with correct schema."""
+    
+    store = await get_default_metadata_store()
+    
+    def _recreate(conn):
+        print("🗑️  Dropping speeches table...")
+        # CASCADE will also drop the foreign key constraints
+        conn.execute(text("DROP TABLE IF EXISTS speeches CASCADE"))
+        print("✅ Table dropped")
+        
+        print("\n🔧 Creating speeches table with TEXT speech_id...")
+        conn.execute(text("""
+            CREATE TABLE speeches (
+                speech_id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                speaker TEXT NOT NULL,
+                party TEXT,
+                chamber TEXT,
+                electorate TEXT,
+                state TEXT,
+                date DATE NOT NULL,
+                hansard_reference TEXT,
+                full_text TEXT NOT NULL,
+                word_count INTEGER,
+                content_hash TEXT UNIQUE,
+                topic_tags TEXT[],
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        print("✅ Table created with TEXT speech_id")
+        
+        # Create indexes
+        print("\n📊 Creating indexes...")
+        conn.execute(text(
+            "CREATE INDEX speeches_speaker_idx ON speeches(speaker)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX speeches_date_idx ON speeches(date)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX speeches_party_idx ON speeches(party)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX speeches_chamber_idx ON speeches(chamber)"
+        ))
+        print("✅ Indexes created")
+        
+        # Verify
+        result = conn.execute(text("""
+            SELECT column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'speeches' 
+            AND column_name = 'speech_id'
+        """))
+        row = result.fetchone()
+        if row:
+            print(f"\n✅ Verified: {row[0]} is {row[1]}")
+    
+    await store._run_in_connection(_recreate)
+    print("\n✅ Table recreation complete!")
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, computed_field, field_validator, ConfigDict
 
-from models.enums import PartyEnum, ChamberEnum
+from src.models.enums import PartyEnum, ChamberEnum
 
 
 class SpeechFrontmatter(BaseModel):

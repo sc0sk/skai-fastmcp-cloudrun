@@ -6,46 +6,40 @@ This tool combines:
 - Metadata filtering (party, chamber, date range)
 """
 
-from typing import Optional
+from typing import Optional, Annotated
 from pydantic import Field
 from fastmcp.tools.tool import ToolAnnotations
 
-from models.enums import ChamberEnum, PartyEnum
-from storage.vector_store import get_default_vector_store
-from storage.metadata_store import get_default_metadata_store
+from src.models.enums import ChamberEnum, PartyEnum
+from src.storage.vector_store import get_default_vector_store
+from src.storage.metadata_store import get_default_metadata_store
 
 
 async def search_hansard_speeches(
-    query: str = Field(
-        ...,
+    query: Annotated[str, Field(
         description="Natural language search query for speech content, topics, or keywords"
-    ),
-    party: Optional[PartyEnum] = Field(
-        None,
+    )],
+    party: Annotated[Optional[PartyEnum], Field(
         description="Filter by political party. Options: Liberal, Labor, Greens, National, Independent"
-    ),
-    chamber: Optional[ChamberEnum] = Field(
-        None,
+    )] = None,
+    chamber: Annotated[Optional[ChamberEnum], Field(
         description="Filter by chamber. Options: House of Representatives, Senate"
-    ),
-    start_date: Optional[str] = Field(
-        None,
+    )] = None,
+    start_date: Annotated[Optional[str], Field(
         description="Start date in ISO 8601 format (YYYY-MM-DD). Example: 2024-05-28. "
                     "Only speeches on or after this date will be returned.",
         pattern=r"^\d{4}-\d{2}-\d{2}$"
-    ),
-    end_date: Optional[str] = Field(
-        None,
+    )] = None,
+    end_date: Annotated[Optional[str], Field(
         description="End date in ISO 8601 format (YYYY-MM-DD). Example: 2025-10-22. "
                     "Only speeches on or before this date will be returned.",
         pattern=r"^\d{4}-\d{2}-\d{2}$"
-    ),
-    limit: int = Field(
-        10,
+    )] = None,
+    limit: Annotated[int, Field(
         ge=1,
         le=100,
         description="Maximum number of results to return (1-100, default 10)"
-    ),
+    )] = 10,
 ) -> dict:
     """Search Simon Kennedy's parliamentary speeches (64 speeches, 2024-2025).
 
@@ -102,14 +96,14 @@ async def search_hansard_speeches(
             "speech_id": speech_id,
             "excerpt": result["chunk_text"][:500],  # Limit excerpt to 500 chars
             "relevance_score": result["score"],
-            "chunk_index": result["metadata"]["chunk_index"],
+            "chunk_index": result["metadata"].get("chunk_index", 0),
             # Speech metadata
-            "speaker": result["metadata"]["speaker"],
-            "party": result["metadata"]["party"],
-            "chamber": result["metadata"]["chamber"],
+            "speaker": result["metadata"].get("speaker", "Unknown"),
+            "party": result["metadata"].get("party", "Unknown"),
+            "chamber": result["metadata"].get("chamber", "Unknown"),
             "state": result["metadata"].get("state"),
-            "date": result["metadata"]["date"],
-            "hansard_reference": result["metadata"]["hansard_reference"],
+            "date": result["metadata"].get("date"),
+            "hansard_reference": result["metadata"].get("hansard_reference", ""),
             "title": speech.title if speech else "Unknown",
             "word_count": speech.word_count if speech else 0,
         })
