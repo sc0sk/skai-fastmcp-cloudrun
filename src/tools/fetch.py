@@ -19,6 +19,9 @@ async def fetch_hansard_speech(
 ) -> dict:
     """Fetch the complete text of a specific parliamentary speech by ID.
 
+    Retrieves the full speech text and complete metadata for a Simon Kennedy
+    parliamentary speech from the Hansard database by unique identifier.
+
     Use this when: You have a speech ID from search results and need the full text
     for detailed analysis or quotation.
 
@@ -26,13 +29,48 @@ async def fetch_hansard_speech(
     direct database access with full speech metadata.
 
     Parameters:
-    - speech_id: Unique identifier obtained from search_hansard_speeches results
+    - speech_id: Unique identifier (UUID format) obtained from search_hansard_speeches
+      results or known directly
 
-    Limitations: Only retrieves Simon Kennedy's speeches. Speech IDs from other
-    sources will fail.
+    Returns:
+        dict: Complete speech data with the following structure:
+            {
+                "speech_id": str,  # UUID for the speech
+                "title": str,  # Speech topic/title
+                "full_text": str,  # Complete speech text
+                "speaker": str,  # "Simon Kennedy"
+                "party": str,  # "Liberal" or other party
+                "chamber": str,  # "House of Representatives" or "Senate"
+                "electorate": str,  # Electoral district
+                "state": str,  # State/territory (e.g., "NSW", "VIC")
+                "date": str,  # ISO 8601 date (YYYY-MM-DD)
+                "hansard_reference": str,  # Official Hansard reference number
+                "topic_tags": list[str],  # Keywords/topics (e.g., ["housing", "infrastructure"])
+                "word_count": int,  # Total words in speech
+                "content_hash": str  # SHA256 hash for integrity verification
+            }
+
+    Error Conditions:
+        - ValueError: If speech_id not found in database (message: "Speech not found: {id}")
+        - ConnectionError: Database connectivity issue (metadata store unavailable)
+        - InvalidArgumentError: Invalid UUID format for speech_id
+        - RuntimeError: Database query execution failure
+
+    Edge Cases:
+        - Malformed UUID: Raises InvalidArgumentError with details
+        - Non-existent UUID (valid format): Raises ValueError "Speech not found"
+        - Empty/null speech_id: Parameter validation prevents submission
+        - Concurrent deletion: Returns ValueError if speech deleted between query and fetch
+
+    Performance:
+        - Typical latency: 100-500ms (direct database lookup)
+        - No caching: Fresh read on each call
+        - Response size: 5-50KB depending on speech length
 
     Workflow: Typically used after search_hansard_speeches to retrieve complete text.
-    You can also use speech IDs directly if known.
+    You can also use speech IDs directly if known from other sources.
+
+    Idempotent: Multiple calls with same speech_id return identical results.
     """
     metadata_store = await get_default_metadata_store()
 

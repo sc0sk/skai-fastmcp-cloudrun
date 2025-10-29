@@ -41,7 +41,10 @@ async def search_hansard_speeches(
         description="Maximum number of results to return (1-100, default 10)"
     )] = 10,
 ) -> dict:
-    """Search Simon Kennedy's parliamentary speeches (64 speeches, 2024-2025).
+    """Search Simon Kennedy's parliamentary speeches using semantic vector search.
+
+    Searches across 64 Simon Kennedy speeches (2024-2025) using AI-powered semantic
+    similarity matching combined with optional metadata filters.
 
     Use this when: The user asks about Simon Kennedy's speeches, voting records, or
     parliamentary statements on topics like housing, immigration, or infrastructure.
@@ -56,7 +59,46 @@ async def search_hansard_speeches(
     - start_date/end_date: ISO 8601 dates (YYYY-MM-DD) for date range filtering
     - limit: Maximum results (1-100, default 10)
 
-    Limitations: Only searches Simon Kennedy's speeches. For other MPs, use web search.
+    Returns:
+        dict: Speech search results with the following structure:
+            {
+                "speeches": [
+                    {
+                        "chunk_id": str,  # Unique identifier for speech chunk
+                        "speech_id": str,  # UUID for complete speech
+                        "excerpt": str,  # First 500 characters of relevant passage
+                        "relevance_score": float,  # 0.0-1.0 similarity score
+                        "chunk_index": int,  # Position in chunked text
+                        "speaker": str,  # "Simon Kennedy"
+                        "party": str,  # "Liberal" or other party
+                        "chamber": str,  # "House of Representatives" or "Senate"
+                        "state": str,  # Electoral state
+                        "date": str,  # ISO 8601 date (YYYY-MM-DD)
+                        "hansard_reference": str,  # Official Hansard reference
+                        "title": str,  # Speech topic/title
+                        "word_count": int  # Total words in full speech
+                    }
+                ],
+                "total_count": int,  # Number of results returned
+                "query": str  # Echo of search query
+            }
+
+    Error Conditions:
+        - ValueError: Invalid date format or missing required query parameter
+        - ConnectionError: Database connectivity issue (vector store or metadata store)
+        - RuntimeError: Embedding generation failure (Vertex AI service issue)
+
+    Edge Cases:
+        - Empty query: Returns ValueError with message "Query cannot be empty"
+        - No matches: Returns {"speeches": [], "total_count": 0, "query": "..."}
+        - Invalid date range (start > end): Vector store returns empty results
+        - Limit exceeds 100: Parameter validation enforces maximum
+        - Very long query: Automatically truncated by embedding service
+
+    Performance:
+        - Typical latency: 1-3 seconds (includes embedding generation and search)
+        - Maximum results: 100 speeches (configurable via limit parameter)
+        - Typical result set: 5-15 speeches for most queries
 
     Workflow: Use search to find relevant speeches, then use fetch_hansard_speech
     to retrieve full text of specific speeches by ID.

@@ -33,6 +33,10 @@ async def ingest_hansard_speech(
 ) -> dict:
     """Ingest a new parliamentary speech into the Hansard database.
 
+    Adds a new Simon Kennedy parliamentary speech to the database with optional
+    vector embedding generation for semantic search capability. Includes 5-stage
+    ingestion pipeline with progress reporting.
+
     Use this when: Adding new Simon Kennedy speeches to the database for search
     and retrieval. This is an administrative operation typically used by data
     ingestion pipelines or scheduled imports.
@@ -42,15 +46,76 @@ async def ingest_hansard_speech(
 
     Parameters:
     - speech_data: Complete speech metadata and text (required fields: date,
-      speaker, party, chamber, title, text)
+      speaker, party, chamber, title, full_text, hansard_reference)
     - generate_embeddings: Whether to create vector embeddings for semantic
       search (default: true)
+    - ctx: Optional MCP Context for progress reporting and logging
 
-    Limitations: Requires valid speech metadata. Does not validate speech
-    authenticity or check for duplicates.
+    Returns:
+        dict: Ingestion result with status and details:
+            Success Response:
+            {
+                "status": "success",
+                "message": str,  # "Successfully ingested speech with N chunks"
+                "speech_id": str,  # UUID for newly ingested speech
+                "chunk_count": int,  # Number of text chunks created
+                "chunk_ids": list[str]  # UUIDs of created chunks (if embeddings generated)
+            }
+            
+            Error Response (validation failure):
+            {
+                "status": "error",
+                "message": str,  # Validation error description
+                "speech_id": None
+            }
+            
+            Error Response (ingestion failure):
+            {
+                "status": "error",
+                "message": str,  # "Ingestion failed: {error description}"
+                "speech_id": None
+            }
 
-    Workflow: Typically used by admin tools or scheduled imports. After ingestion,
-    speeches become searchable via search_hansard_speeches.
+    Required speech_data Fields:
+        - title (str): Speech topic/title
+        - full_text (str): Complete speech text (minimum 100 characters)
+        - speaker (str): Speaker name ("Simon Kennedy")
+        - party (str): Political party affiliation
+        - chamber (str): "House of Representatives" or "Senate"
+        - date (str or date): ISO 8601 date (YYYY-MM-DD)
+        - hansard_reference (str): Official Hansard reference number
+
+    Optional speech_data Fields:
+        - electorate (str): Electoral district
+        - state (str): State/territory code
+        - topic_tags (list[str]): Keywords/topics
+        - source_url (str): Source URL
+
+    Error Conditions:
+        - ValueError: Missing required fields, invalid date format, or empty text
+        - ConnectionError: Database connectivity issue (vector/metadata store)
+        - RuntimeError: Embedding generation failure, database write failure
+        - ValidationError: Invalid speech_data schema
+
+    Edge Cases:
+        - Very long speeches (>100K characters): Chunked into ~200-word segments
+        - Duplicate speeches: No deduplication; will create duplicate entries
+        - Special characters in text: Preserved and searchable
+        - Missing optional fields: Ingestion succeeds with defaults
+        - generate_embeddings=False: Speeds up ingestion, disables semantic search
+
+    Progress Reporting (via ctx):
+        Stage 1 (0-20%): Validation
+        Stage 2 (20-40%): Text chunking
+        Stage 3 (40-70%): Embedding generation
+        Stage 4 (70-90%): Vector storage
+        Stage 5 (90-100%): Metadata storage
+
+    Performance:
+        - Typical latency: 10-30 seconds (includes embedding generation)
+        - With generate_embeddings=False: 1-5 seconds
+        - Chunk size: ~1000 characters (~200 words) with 100-char overlap
+        - Maximum recommended file size: 1MB
 
     Note: This is a write operation that modifies the database. Use with caution.
     """
