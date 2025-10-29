@@ -1,0 +1,80 @@
+
+        <html>
+        <head>
+            <title>MCP Compliance Dashboard - Phase 3</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+                .dashboard { max-width: 1200px; margin: 0 auto; }
+                .header { background: #003366; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+                .header h1 { margin: 0; }
+                .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 20px; }
+                .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+                .card.excellent { border-left: 4px solid #4CAF50; }
+                .card.very_good { border-left: 4px solid #8BC34A; }
+                .card.good { border-left: 4px solid #FFC107; }
+                .card.fair { border-left: 4px solid #FF9800; }
+                .card.poor { border-left: 4px solid #f44336; }
+                .score { font-size: 32px; font-weight: bold; color: #003366; }
+                .grade { font-size: 18px; color: #666; }
+                .metrics { margin-top: 10px; }
+                .metric { padding: 8px; font-size: 14px; }
+                .metric.pass { color: #4CAF50; }
+                .metric.warn { color: #FF9800; }
+                .metric.fail { color: #f44336; }
+                .recommendations { background: #FFF8DC; padding: 15px; border-left: 4px solid #FFC107; margin-top: 10px; }
+                .footer { text-align: center; margin-top: 30px; color: #999; font-size: 12px; }
+            </style>
+        </head>
+        <body>
+            <div class="dashboard">
+                <div class="header">
+                    <h1>🎯 MCP Best Practices Compliance Dashboard</h1>
+                    <p>Feature 018: Phase 3 - Automated Compliance Scoring</p>
+                </div>
+        
+                <div class="card excellent">
+                    <h2>search_hansard_speeches</h2>
+                    <div class="score">94.67%</div>
+                    <div class="grade">EXCELLENT - Tool meets all MCP best practices</div>
+                    
+                    <div class="metrics">
+                        <strong>Category Scores:</strong>
+            <div class="metric">• Documentation: 90%</div><div class="metric">• Integration: 100%</div>
+                    </div>
+                    
+                    <div class="metrics">
+                        <strong>Metrics: 5/5 Passing</strong>
+            <div class="metric pass">• Documentation Quality: pass</div><div class="metric pass">• Returns Documentation: pass</div><div class="metric pass">• Error Documentation: pass</div><div class="metric pass">• Async Support: pass</div><div class="metric pass">• Parameter Validation: pass</div>
+                    </div>
+            
+                </div>
+            
+                <div class="card very_good">
+                    <h2>fetch_hansard_speech</h2>
+                    <div class="score">86.67%</div>
+                    <div class="grade">VERY GOOD - Tool meets most best practices with minor gaps</div>
+                    
+                    <div class="metrics">
+                        <strong>Category Scores:</strong>
+            <div class="metric">• Documentation: 90%</div><div class="metric">• Integration: 83%</div>
+                    </div>
+                    
+                    <div class="metrics">
+                        <strong>Metrics: 4/5 Passing</strong>
+            <div class="metric pass">• Documentation Quality: pass</div><div class="metric pass">• Returns Documentation: pass</div><div class="metric pass">• Error Documentation: pass</div><div class="metric pass">• Async Support: pass</div><div class="metric warn">• Parameter Validation: warn</div>
+                    </div>
+            
+                    <div class="recommendations">
+                        <strong>🔧 Recommendations:</strong>
+                <div>• Ensure all parameters are documented with types, defaults, and constraints</div>
+                    </div>
+                
+                </div>
+            
+                <div class="footer">
+                    <p>MCP Compliance Dashboard | Feature 018 Phase 3 | Generated automatically</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        

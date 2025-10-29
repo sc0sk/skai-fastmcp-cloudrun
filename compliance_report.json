@@ -1,0 +1,126 @@
+[
+  {
+    "tool_name": "search_hansard_speeches",
+    "timestamp": "2025-10-29T11:15:34.959056",
+    "compliance_score": 0.9466666666666667,
+    "grade": "EXCELLENT",
+    "assessment": "Tool meets all MCP best practices",
+    "category_scores": {
+      "Documentation": 0.8999999999999999,
+      "Integration": 1.0
+    },
+    "metrics": [
+      {
+        "name": "Documentation Quality",
+        "category": "Documentation",
+        "weight": 0.2,
+        "score": 1.0,
+        "status": "PASS",
+        "evidence": "\u2713 Has Use this when; \u2713 Has Do not use; \u2713 Has Parameters; \u2713 Has Returns; \u2713 Has Error Conditions; \u2713 Has Edge Cases",
+        "recommendation": "Found 6/6 key sections. Add missing: "
+      },
+      {
+        "name": "Returns Documentation",
+        "category": "Documentation",
+        "weight": 0.4,
+        "score": 0.8,
+        "status": "PASS",
+        "evidence": "\u2713 Has Returns section; \u2713 Has response schema; \u2713 Documents error responses; \u2717 Missing example response",
+        "recommendation": "Ensure Returns section includes: schema, error cases, example response"
+      },
+      {
+        "name": "Error Documentation",
+        "category": "Documentation",
+        "weight": 0.2,
+        "score": 1.0,
+        "status": "PASS",
+        "evidence": "\u2713 Has error documentation; \u2713 Documents 3 error types; \u2713 Documents edge cases",
+        "recommendation": "Document specific error types, messages, and handling approaches"
+      },
+      {
+        "name": "Async Support",
+        "category": "Integration",
+        "weight": 0.4,
+        "score": 1.0,
+        "status": "PASS",
+        "evidence": "\u2713 Function is properly async",
+        "recommendation": "Maintain async support for FastMCP compatibility"
+      },
+      {
+        "name": "Parameter Validation",
+        "category": "Integration",
+        "weight": 0.3,
+        "score": 1.0,
+        "status": "PASS",
+        "evidence": "\u2713 Has Parameters section; \u2713 Documents parameter types; \u2713 Documents required/optional; \u2713 Documents defaults/constraints",
+        "recommendation": "Ensure all parameters are documented with types, defaults, and constraints"
+      }
+    ],
+    "recommendations": [],
+    "passing_metrics": 5,
+    "total_metrics": 5
+  },
+  {
+    "tool_name": "fetch_hansard_speech",
+    "timestamp": "2025-10-29T11:15:34.959170",
+    "compliance_score": 0.8666666666666666,
+    "grade": "VERY GOOD",
+    "assessment": "Tool meets most best practices with minor gaps",
+    "category_scores": {
+      "Documentation": 0.8999999999999999,
+      "Integration": 0.8285714285714287
+    },
+    "metrics": [
+      {
+        "name": "Documentation Quality",
+        "category": "Documentation",
+        "weight": 0.2,
+        "score": 1.0,
+        "status": "PASS",
+        "evidence": "\u2713 Has Use this when; \u2713 Has Do not use; \u2713 Has Parameters; \u2713 Has Returns; \u2713 Has Error Conditions; \u2713 Has Edge Cases",
+        "recommendation": "Found 6/6 key sections. Add missing: "
+      },
+      {
+        "name": "Returns Documentation",
+        "category": "Documentation",
+        "weight": 0.4,
+        "score": 0.8,
+        "status": "PASS",
+        "evidence": "\u2713 Has Returns section; \u2713 Has response schema; \u2713 Documents error responses; \u2717 Missing example response",
+        "recommendation": "Ensure Returns section includes: schema, error cases, example response"
+      },
+      {
+        "name": "Error Documentation",
+        "category": "Documentation",
+        "weight": 0.2,
+        "score": 1.0,
+        "status": "PASS",
+        "evidence": "\u2713 Has error documentation; \u2713 Documents 3 error types; \u2713 Documents edge cases",
+        "recommendation": "Document specific error types, messages, and handling approaches"
+      },
+      {
+        "name": "Async Support",
+        "category": "Integration",
+        "weight": 0.4,
+        "score": 1.0,
+        "status": "PASS",
+        "evidence": "\u2713 Function is properly async",
+        "recommendation": "Maintain async support for FastMCP compatibility"
+      },
+      {
+        "name": "Parameter Validation",
+        "category": "Integration",
+        "weight": 0.3,
+        "score": 0.6,
+        "status": "WARN",
+        "evidence": "\u2713 Has Parameters section; \u2713 Documents parameter types; \u2717 Missing required/optional indicators; \u2717 Missing defaults/constraints",
+        "recommendation": "Ensure all parameters are documented with types, defaults, and constraints"
+      }
+    ],
+    "recommendations": [
+      "Ensure all parameters are documented with types, defaults, and constraints"
+    ],
+    "passing_metrics": 4,
+    "total_metrics": 5
+  }
+]
