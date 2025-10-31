@@ -196,7 +196,11 @@ async def oauth_protected_resource_metadata(request: Request):
     Returns a minimal metadata document advertising this resource server and
     its associated authorization server (same base URL in our deployment).
     """
-    base_url = os.getenv("FASTMCP_SERVER_AUTH_GITHUB_BASE_URL", "") or request.url.scheme + "://" + request.url.netloc
+    # Force HTTPS for production (Cloud Run is always HTTPS externally, even if HTTP internally)
+    base_url = os.getenv("FASTMCP_SERVER_AUTH_GITHUB_BASE_URL", "")
+    if not base_url:
+        scheme = "https" if request.headers.get("x-forwarded-proto") == "https" or os.getenv("PORT") else request.url.scheme
+        base_url = scheme + "://" + request.url.netloc
     # MCP HTTP base path (resource) – FastMCP HTTP endpoints are served from the same origin
     resource_url = f"{base_url}/mcp"
     body = {
