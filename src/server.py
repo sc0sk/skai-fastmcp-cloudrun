@@ -13,6 +13,11 @@ This server provides MCP tools optimized for ChatGPT Developer Mode with:
 import os
 from contextlib import asynccontextmanager
 from fastmcp import FastMCP
+from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.requests import Request
 
 # Lifespan context manager for global resources (database connections, embedding models)
 @asynccontextmanager
@@ -87,15 +92,19 @@ if os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() != "true":
     if os.getenv("FASTMCP_SERVER_AUTH") == "fastmcp.server.auth.providers.github.GitHubProvider":
         try:
             from fastmcp.server.auth.providers.github import GitHubProvider
+            from src.auth.postgres_storage import PostgresKVStorage
 
+            # Use PostgreSQL storage for client registrations (persists across restarts)
+            client_storage = PostgresKVStorage()
+            
             # GitHubProvider automatically loads configuration from environment variables:
             # FASTMCP_SERVER_AUTH_GITHUB_CLIENT_ID
             # FASTMCP_SERVER_AUTH_GITHUB_CLIENT_SECRET
             # FASTMCP_SERVER_AUTH_GITHUB_BASE_URL
-            auth_provider = GitHubProvider()
-            print("✅ GitHub OAuth authentication enabled")
-        except ImportError:
-            print("⚠️  Warning: GitHub OAuth provider not available (fastmcp version too old)")
+            auth_provider = GitHubProvider(client_storage=client_storage)
+            print("✅ GitHub OAuth authentication enabled with persistent client storage")
+        except ImportError as e:
+            print(f"⚠️  Warning: GitHub OAuth provider not available: {e}")
     else:
         print("ℹ️  No authentication configured (FASTMCP_SERVER_AUTH not set)")
 else:
@@ -161,6 +170,72 @@ print("   📝 ingest_hansard_speech [write operation with progress reporting]")
 # Expose ASGI app for uvicorn (Cloud Run deployment)
 # FastMCP's http_app() method returns the Starlette ASGI application
 app = mcp.http_app()
+
+# Add CORS middleware to allow OAuth flows from browser-based clients
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for OAuth (including localhost)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
+
+# Add OAuth 2.0 Protected Resource Metadata endpoint (2025-DRAFT-v2)
+# See: https://datatracker.ietf.org/doc/draft-ietf-oauth-resource-metadata/
+@app.route("/.well-known/oauth-protected-resource", methods=["GET"])  # type: ignore[misc]
+async def oauth_protected_resource_metadata(request: Request):
+    """Expose OAuth Protected Resource Metadata for MCP Inspector.
+
+    Returns a minimal metadata document advertising this resource server and
+    its associated authorization server (same base URL in our deployment).
+    """
+    base_url = os.getenv("FASTMCP_SERVER_AUTH_GITHUB_BASE_URL", "") or request.url.scheme + "://" + request.url.netloc
+    # MCP HTTP base path (resource) – FastMCP HTTP endpoints are served from the same origin
+    resource_url = f"{base_url}/mcp"
+    body = {
+        "resource": resource_url,
+        "authorization_servers": [
+            f"{base_url}/"
+        ],
+        # Optional: align with AS metadata already exposed at
+        # /.well-known/oauth-authorization-server on the same origin.
+    }
+    return JSONResponse(body)
+
+# OAuth 2.0 Protected Resource Metadata (2025-DRAFT-v2)
+# Exposes resource metadata for OAuth-protected resource discovery
+# See: https://www.ietf.org/archive/id/draft-ietf-oauth-resource-metadata-08.html
+async def oauth_protected_resource_metadata(request: Request):
+    """Return OAuth 2.0 Protected Resource Metadata.
+
+    Fields are minimal but sufficient for clients to discover the
+    authorization server and supported bearer auth method.
+    """
+    # Compute our resource base URL from the incoming request
+    resource_base = f"{request.url.scheme}://{request.url.netloc}"
+
+    # Authorization server base URL (defaults to this server if not set)
+    auth_base = os.getenv("FASTMCP_SERVER_AUTH_GITHUB_BASE_URL", resource_base)
+
+    metadata = {
+        # Unique identifier for this protected resource
+        "resource": f"{resource_base}/",
+        # Authorization servers that can issue tokens for this resource
+        "authorization_servers": [f"{auth_base}/"],
+        # OAuth scopes this resource understands
+        "scopes_supported": ["user"],
+        # How bearer tokens are presented
+        "bearer_methods_supported": ["authorization_header"],
+    }
+    return JSONResponse(metadata)
+
+# Register the metadata route
+app.add_route(
+    "/.well-known/oauth-protected-resource",
+    oauth_protected_resource_metadata,
+    methods=["GET"],
+)
 
 # The server is ready to be run with:
 # DANGEROUSLY_OMIT_AUTH=true fastmcp dev src/server.py (local dev)
