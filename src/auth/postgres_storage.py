@@ -38,11 +38,17 @@ class PostgresKVStorage:
             return
         
         # Create engine with environment config on first use
-        # Pass user=None, password=None to enable Cloud SQL IAM auth
+        # Read credentials from environment (CLOUDSQL_USER, CLOUDSQL_PASSWORD secrets)
+        import os
         project_id = (
             config.get_gcp_project_id()
             or config.DEFAULT_GCP_PROJECT_ID
         )
+        
+        # Get user and password from environment (mounted secrets)
+        db_user = os.getenv("CLOUDSQL_USER")
+        db_password = os.getenv("CLOUDSQL_PASSWORD")
+        
         self._engine_manager = CloudSQLEngine(
             project_id=project_id,
             region=config.get_gcp_region(),
@@ -51,10 +57,10 @@ class PostgresKVStorage:
                 or config.CLOUDSQL_INSTANCE_NAME
             ),
             database=config.get_cloudsql_database(),
-            user=None,  # Use IAM Auth (will auto-detect service account)
-            password=None,  # Use IAM Auth (no password needed)
+            user=db_user,  # From CLOUDSQL_USER secret
+            password=db_password,  # From CLOUDSQL_PASSWORD secret
         )
-        logger.info("PostgresKVStorage engine initialized on first use with IAM auth")
+        logger.info(f"PostgresKVStorage engine initialized with user={db_user}, password={'***' if db_password else None}")
 
     def _ensure_table_sync(self):
         """Ensure the oauth_clients table exists (sync version)."""
