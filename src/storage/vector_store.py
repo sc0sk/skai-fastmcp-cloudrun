@@ -1,12 +1,21 @@
 """PostgreSQL vector store using LangChain 1.0 with langchain-postgres.
 
 This module provides vector storage via langchain-postgres PGVector backend.
+
+Auth Modes:
+- IAM (recommended): Set USE_IAM_AUTH=true to force IAM DB auth via
+    Cloud SQL Connector (no passwords). In this mode, we do not pass
+    user/password and rely on the service account.
+- Password (legacy/local): Provide CLOUDSQL_USER and DATABASE_PASSWORD
+    (or CLOUDSQL_PASSWORD for backward-compat) and leave USE_IAM_AUTH unset
+    or false.
 """
 
 from typing import List, Optional, Dict, Any
 import os
 from dotenv import load_dotenv
 from fastmcp import Context
+import logging
 
 try:
     # Optional import; only required if VECTOR_BACKEND=postgres
@@ -16,6 +25,8 @@ except Exception:  # pragma: no cover - optional dependency path
 
 # Load environment variables
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 # Singleton instance with default configuration
@@ -57,17 +68,31 @@ class _PostgresVectorFacade:
                     "langchain-postgres backend requested but not available"
                 )
             # Connection will be provided via environment/engine.
-            # Read credentials from Cloud Run secrets
+            # Determine auth mode (IAM vs Password) consistently with metadata_store
+            use_iam_env = (os.getenv("USE_IAM_AUTH", "").strip().lower())
+            use_iam = use_iam_env in ("1", "true", "yes")
+
+            # Read credentials (legacy/local). Prefer DATABASE_PASSWORD; fallback CLOUDSQL_PASSWORD
             db_user = os.getenv("CLOUDSQL_USER")
-            db_password = os.getenv("CLOUDSQL_PASSWORD")
-            
+            db_password = os.getenv("DATABASE_PASSWORD") or os.getenv("CLOUDSQL_PASSWORD")
+
+            user = None
+            password = None
+            if not use_iam and db_user and db_password:
+                user = db_user
+                password = db_password
+                logger.info("Vector store using password auth (legacy/local)")
+            else:
+                # Force IAM by clearing credentials
+                logger.info("Vector store using IAM DB authentication via Cloud SQL Connector")
+
             self._store = _PGStore(
                 project_id=os.getenv("GCP_PROJECT_ID"),
                 region=os.getenv("GCP_REGION"),
                 instance=os.getenv("CLOUDSQL_INSTANCE"),
                 database=os.getenv("CLOUDSQL_DATABASE"),
-                user=db_user,  # From CLOUDSQL_USER secret
-                password=db_password,  # From CLOUDSQL_PASSWORD secret
+                user=user,
+                password=password,
             )
 
     async def add_chunks(

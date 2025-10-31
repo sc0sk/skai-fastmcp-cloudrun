@@ -231,7 +231,7 @@ class CloudSQLEngine:
                 # - enable_iam_auth=True enables pg8000 to use IAM tokens instead of passwords
                 # - Driver must be pg8000 (only driver supporting IAM with connector v1.18)
                 kwargs["user"] = iam_user
-                kwargs["enable_iam_auth"] = "true"  # pg8000 connector expects string "true"
+                kwargs["enable_iam_auth"] = True  # Boolean True per pg8000/connector API
                 driver = "pg8000"
             
             return self._connector.connect(
