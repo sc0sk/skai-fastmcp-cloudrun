@@ -57,13 +57,17 @@ class _PostgresVectorFacade:
                     "langchain-postgres backend requested but not available"
                 )
             # Connection will be provided via environment/engine.
+            # Read credentials from Cloud Run secrets
+            db_user = os.getenv("CLOUDSQL_USER")
+            db_password = os.getenv("CLOUDSQL_PASSWORD")
+            
             self._store = _PGStore(
                 project_id=os.getenv("GCP_PROJECT_ID"),
                 region=os.getenv("GCP_REGION"),
                 instance=os.getenv("CLOUDSQL_INSTANCE"),
                 database=os.getenv("CLOUDSQL_DATABASE"),
-                user=None,  # Use IAM Auth
-                password=None, # Use IAM Auth
+                user=db_user,  # From CLOUDSQL_USER secret
+                password=db_password,  # From CLOUDSQL_PASSWORD secret
             )
 
     async def add_chunks(
