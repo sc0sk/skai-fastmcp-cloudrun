@@ -16,8 +16,6 @@ from fastmcp import FastMCP
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 from starlette.requests import Request
-from starlette.responses import JSONResponse
-from starlette.requests import Request
 
 # Lifespan context manager for global resources (database connections, embedding models)
 @asynccontextmanager
@@ -94,7 +92,8 @@ if os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() != "true":
             from fastmcp.server.auth.providers.github import GitHubProvider
             from src.auth.postgres_storage import PostgresKVStorage
 
-            # Use PostgreSQL storage for client registrations (persists across restarts)
+            # Use PostgreSQL-backed storage for persistent OAuth client registrations
+            # Credentials loaded from cloud secrets (CLOUDSQL_USER, CLOUDSQL_PASSWORD)
             client_storage = PostgresKVStorage()
             
             # GitHubProvider automatically loads configuration from environment variables:
@@ -102,7 +101,7 @@ if os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() != "true":
             # FASTMCP_SERVER_AUTH_GITHUB_CLIENT_SECRET
             # FASTMCP_SERVER_AUTH_GITHUB_BASE_URL
             auth_provider = GitHubProvider(client_storage=client_storage)
-            print("✅ GitHub OAuth authentication enabled with persistent client storage")
+            print("✅ GitHub OAuth authentication enabled (PostgreSQL client storage)")
         except ImportError as e:
             print(f"⚠️  Warning: GitHub OAuth provider not available: {e}")
     else:
@@ -203,39 +202,7 @@ async def oauth_protected_resource_metadata(request: Request):
     }
     return JSONResponse(body)
 
-# OAuth 2.0 Protected Resource Metadata (2025-DRAFT-v2)
-# Exposes resource metadata for OAuth-protected resource discovery
-# See: https://www.ietf.org/archive/id/draft-ietf-oauth-resource-metadata-08.html
-async def oauth_protected_resource_metadata(request: Request):
-    """Return OAuth 2.0 Protected Resource Metadata.
-
-    Fields are minimal but sufficient for clients to discover the
-    authorization server and supported bearer auth method.
-    """
-    # Compute our resource base URL from the incoming request
-    resource_base = f"{request.url.scheme}://{request.url.netloc}"
-
-    # Authorization server base URL (defaults to this server if not set)
-    auth_base = os.getenv("FASTMCP_SERVER_AUTH_GITHUB_BASE_URL", resource_base)
-
-    metadata = {
-        # Unique identifier for this protected resource
-        "resource": f"{resource_base}/",
-        # Authorization servers that can issue tokens for this resource
-        "authorization_servers": [f"{auth_base}/"],
-        # OAuth scopes this resource understands
-        "scopes_supported": ["user"],
-        # How bearer tokens are presented
-        "bearer_methods_supported": ["authorization_header"],
-    }
-    return JSONResponse(metadata)
-
-# Register the metadata route
-app.add_route(
-    "/.well-known/oauth-protected-resource",
-    oauth_protected_resource_metadata,
-    methods=["GET"],
-)
+# (Route registered via decorator above) OAuth 2.0 Protected Resource Metadata
 
 # The server is ready to be run with:
 # DANGEROUSLY_OMIT_AUTH=true fastmcp dev src/server.py (local dev)
