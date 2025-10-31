@@ -27,31 +27,38 @@ class PostgresKVStorage:
         """Initialize PostgreSQL KV storage.
 
         Args:
-            engine_manager: Optional CloudSQLEngine. If None, creates one.
+            engine_manager: Optional CloudSQLEngine. If None, creates one lazily on first use.
         """
-        if engine_manager is None:
-            # Create engine with environment config
-            project_id = (
-                config.get_gcp_project_id()
-                or config.DEFAULT_GCP_PROJECT_ID
-            )
-            engine_manager = CloudSQLEngine(
-                project_id=project_id,
-                region=config.get_gcp_region(),
-                instance=(
-                    config.get_cloudsql_instance()
-                    or config.CLOUDSQL_INSTANCE_NAME
-                ),
-                database=config.get_cloudsql_database(),
-            )
-
         self._engine_manager = engine_manager
         self._table_initialized = False
+
+    def _lazy_init_engine(self):
+        """Lazily initialize the engine on first use."""
+        if self._engine_manager is not None:
+            return
+        
+        # Create engine with environment config on first use
+        project_id = (
+            config.get_gcp_project_id()
+            or config.DEFAULT_GCP_PROJECT_ID
+        )
+        self._engine_manager = CloudSQLEngine(
+            project_id=project_id,
+            region=config.get_gcp_region(),
+            instance=(
+                config.get_cloudsql_instance()
+                or config.CLOUDSQL_INSTANCE_NAME
+            ),
+            database=config.get_cloudsql_database(),
+        )
+        logger.info("PostgresKVStorage engine initialized on first use")
 
     def _ensure_table_sync(self):
         """Ensure the oauth_clients table exists (sync version)."""
         if self._table_initialized:
             return
+
+        self._lazy_init_engine()
 
         with self._engine_manager.engine.begin() as conn:
             conn.execute(text("""
@@ -102,6 +109,7 @@ class PostgresKVStorage:
         storage_key = self._compose_key(key, collection)
 
         def _get_sync():
+            self._lazy_init_engine()
             with self._engine_manager.engine.connect() as conn:
                 result = conn.execute(
                     text("SELECT value FROM oauth_clients WHERE key = :key"),
@@ -138,6 +146,7 @@ class PostgresKVStorage:
         storage_key = self._compose_key(key, collection)
 
         def _put_sync():
+            self._lazy_init_engine()
             with self._engine_manager.engine.begin() as conn:
                 conn.execute(
                     text("""
@@ -170,6 +179,7 @@ class PostgresKVStorage:
         storage_key = self._compose_key(key, collection)
 
         def _delete_sync():
+            self._lazy_init_engine()
             with self._engine_manager.engine.begin() as conn:
                 conn.execute(
                     text("DELETE FROM oauth_clients WHERE key = :key"),
@@ -195,6 +205,7 @@ class PostgresKVStorage:
         await self._ensure_table()
 
         def _cleanup_sync():
+            self._lazy_init_engine()
             with self._engine_manager.engine.begin() as conn:
                 result = conn.execute(
                     text("""
