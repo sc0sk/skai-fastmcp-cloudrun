@@ -85,6 +85,18 @@ class MemoryKVStorage:
                 f"Stored OAuth client: {storage_key}, TTL: {ttl}s"
             )
 
+    async def set(
+        self, key: str, value: dict[str, Any], collection: str | None = None
+    ) -> None:
+        """Alias for put() for backwards compatibility.
+        
+        Args:
+            key: The key to store under
+            value: The dict to store
+            collection: Optional namespace (prefixed to key)
+        """
+        await self.put(key=key, value=value, collection=collection)
+
     async def delete(
         self, key: str, collection: str | None = None
     ) -> None:

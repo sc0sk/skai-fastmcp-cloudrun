@@ -90,18 +90,25 @@ if os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() != "true":
     if os.getenv("FASTMCP_SERVER_AUTH") == "fastmcp.server.auth.providers.github.GitHubProvider":
         try:
             from fastmcp.server.auth.providers.github import GitHubProvider
-            from src.auth.postgres_storage import PostgresKVStorage
+            from src.auth.memory_storage import MemoryKVStorage
+            import logging
 
-            # Use PostgreSQL-backed storage for persistent OAuth client registrations
-            # Credentials loaded from cloud secrets (CLOUDSQL_USER, CLOUDSQL_PASSWORD)
-            client_storage = PostgresKVStorage()
+            # Get logger for this module
+            logger = logging.getLogger(__name__)
+
+            # Use in-memory storage for OAuth client registrations
+            # Simple, reliable, works for single-instance Cloud Run deployments
+            # (PostgreSQL password auth has proven problematic; IAM auth requires complex setup)
+            client_storage = MemoryKVStorage()
+            logger.info("OAuth client storage initialized", extra={"storage_type": "memory", "backend": "MemoryKVStorage"})
             
             # GitHubProvider automatically loads configuration from environment variables:
             # FASTMCP_SERVER_AUTH_GITHUB_CLIENT_ID
             # FASTMCP_SERVER_AUTH_GITHUB_CLIENT_SECRET
             # FASTMCP_SERVER_AUTH_GITHUB_BASE_URL
             auth_provider = GitHubProvider(client_storage=client_storage)
-            print("✅ GitHub OAuth authentication enabled (PostgreSQL client storage)")
+            print("✅ GitHub OAuth authentication enabled (in-memory client storage)")
+            logger.info("GitHub OAuth authentication enabled", extra={"client_storage": "in-memory"})
         except ImportError as e:
             print(f"⚠️  Warning: GitHub OAuth provider not available: {e}")
     else:
