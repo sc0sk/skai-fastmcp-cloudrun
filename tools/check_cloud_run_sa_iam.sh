@@ -72,7 +72,7 @@ check_role() {
     --arg ROLE "$role" \
     --arg SA "$SA_EMAIL" \
     '.bindings[] | select(.role==$ROLE) | .members[]' \
-    | grep -E "(serviceAccount:$SA|principal://iam.googleapis.com/$SA)" >/dev/null 2>&1
+    | grep -E "(serviceAccount:$SA_EMAIL|principal://iam.googleapis.com/$SA_EMAIL)" >/dev/null 2>&1
 }
 
 HAS_CLIENT="no"
