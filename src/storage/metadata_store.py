@@ -60,10 +60,24 @@ class MetadataStore:
         user: Optional[str] = None,
         password: Optional[str] = None,
     ) -> None:
-        self.project_id = project_id or os.getenv("GCP_PROJECT_ID")
-        self.region = region or os.getenv("GCP_REGION", "us-central1")
-        self.instance = instance or os.getenv("CLOUDSQL_INSTANCE")
-        self.database = database or os.getenv("CLOUDSQL_DATABASE", "hansard")
+        from src import config
+        self.project_id = (
+            project_id
+            or os.getenv("GCP_PROJECT_ID")
+            or config.get_gcp_project_id()
+            or config.DEFAULT_GCP_PROJECT_ID
+        )
+        self.region = region or os.getenv("GCP_REGION", config.DEFAULT_GCP_REGION)
+        self.instance = (
+            instance
+            or os.getenv("CLOUDSQL_INSTANCE")
+            or config.get_cloudsql_instance()
+            or config.CLOUDSQL_INSTANCE_NAME
+        )
+        self.database = (
+            database
+            or os.getenv("CLOUDSQL_DATABASE", config.DEFAULT_CLOUDSQL_DATABASE)
+        )
         # Read user/password from parameters or environment
         self.user = user or os.getenv("CLOUDSQL_USER") or None
 

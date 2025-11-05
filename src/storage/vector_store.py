@@ -86,11 +86,44 @@ class _PostgresVectorFacade:
                 # Force IAM by clearing credentials
                 logger.info("Vector store using IAM DB authentication via Cloud SQL Connector")
 
+            # Resolve Cloud SQL connection parameters with safe fallbacks
+            from src import config
+            project_id = (
+                os.getenv("GCP_PROJECT_ID")
+                or config.get_gcp_project_id()
+                or config.DEFAULT_GCP_PROJECT_ID
+            )
+            region = (
+                os.getenv("GCP_REGION")
+                or config.get_gcp_region()
+            )
+            instance = (
+                os.getenv("CLOUDSQL_INSTANCE")
+                or config.get_cloudsql_instance()
+                or config.CLOUDSQL_INSTANCE_NAME
+            )
+            database = (
+                os.getenv("CLOUDSQL_DATABASE")
+                or config.get_cloudsql_database()
+                or config.DEFAULT_CLOUDSQL_DATABASE
+            )
+
+            logger.info(
+                "Vector store Cloud SQL params",
+                extra={
+                    "project_id": project_id,
+                    "region": region,
+                    "instance": instance,
+                    "database": database,
+                    "auth_mode": "IAM" if use_iam else "password",
+                },
+            )
+
             self._store = _PGStore(
-                project_id=os.getenv("GCP_PROJECT_ID"),
-                region=os.getenv("GCP_REGION"),
-                instance=os.getenv("CLOUDSQL_INSTANCE"),
-                database=os.getenv("CLOUDSQL_DATABASE"),
+                project_id=project_id,
+                region=region,
+                instance=instance,
+                database=database,
                 user=user,
                 password=password,
             )
