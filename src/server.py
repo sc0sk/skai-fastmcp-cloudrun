@@ -117,6 +117,12 @@ else:
 # Create FastMCP server instance with authentication and lifespan
 mcp = FastMCP("Hansard MCP Server", auth=auth_provider, lifespan=lifespan)
 
+# Add GitHub access control middleware (restrict to allowed usernames/emails)
+if auth_provider and not os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() == "true":
+    from src.auth.github_middleware import GitHubAccessControlMiddleware
+    mcp.add_middleware(GitHubAccessControlMiddleware)
+    print("✅ GitHub access control middleware enabled")
+
 # Register search tool with ChatGPT Developer Mode enhancements
 # Note: icon parameter not supported in FastMCP 2.12.5, icons stored in metadata for future use
 mcp.tool(
