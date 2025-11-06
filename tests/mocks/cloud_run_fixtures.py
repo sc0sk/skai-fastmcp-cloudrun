@@ -99,6 +99,7 @@ def mock_local_adc():
         mock_creds.service_account_email = 'fastmcp-server@skai-fastmcp-cloudrun.iam.gserviceaccount.com'
         mock_creds.valid = True
         mock_creds.token = 'mock-oauth2-token'
+        mock_creds.universe_domain = "googleapis.com"  # Fix universe domain check
         mock_auth.return_value = (mock_creds, 'skai-fastmcp-cloudrun')
         yield mock_auth
 
