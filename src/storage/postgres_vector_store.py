@@ -314,6 +314,32 @@ class PostgresVectorStoreService:
                 else embedding_service
             )
 
+    # Preflight: Ensure pgvector extension is installed to avoid
+    # opaque driver errors
+        try:
+            from sqlalchemy import text
+            # If an Engine was provided/created, validate extension presence
+            engine = connection  # type: ignore[assignment]
+            if hasattr(engine, "connect"):
+                with engine.connect() as conn:  # type: ignore[attr-defined]
+                    exists = conn.execute(
+                        text(
+                            "SELECT 1 FROM pg_extension "
+                            "WHERE extname='vector'"
+                        )
+                    ).scalar() is not None
+                    if not exists:
+                        raise RuntimeError(
+                            "pgvector extension is not enabled in this "
+                            "database. Ask a privileged user to run: "
+                            "CREATE EXTENSION IF NOT EXISTS vector; "
+                            "(one-time per database)."
+                        )
+        except Exception:
+            # If this check fails, surface a clear message rather than a
+            # NoneType .decode() later from downstream code
+            raise
+
         # Initialize PGVector store with langchain-postgres
         # This will auto-create tables (langchain_pg_collection,
         # langchain_pg_embedding) on first use
@@ -322,6 +348,17 @@ class PostgresVectorStoreService:
             embeddings=self.embeddings,
             use_jsonb=use_jsonb,  # JSONB for efficient metadata filtering
             collection_name=self.collection_name,
+            # Do NOT attempt to CREATE EXTENSION vector at runtime.
+            # Cloud Run uses IAM DB auth and the service account typically
+            # lacks privileges to create extensions. The pgvector extension
+            # must be enabled ahead of time by a privileged user.
+            #
+            # This avoids errors like:
+            #   "Failed to create vector extension: 'NoneType' object has no "
+            #   "attribute 'decode'"
+            # which can surface from driver/connector layers when extension
+            # creation is attempted without proper privileges.
+            create_extension=False,
         )
 
     @with_retry(max_retries=3, base_delay=1.0)
