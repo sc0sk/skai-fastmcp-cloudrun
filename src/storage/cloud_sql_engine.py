@@ -263,10 +263,20 @@ class CloudSQLEngine:
                     self._iam_valid = False
 
                 # For Cloud SQL IAM DB Auth with PostgreSQL:
-                # - Database user must be the full IAM principal email (service account)
+                # - Database user must be the service account ID WITHOUT .gserviceaccount.com suffix
+                #   (e.g., "666924716777-compute@developer" not "...@developer.gserviceaccount.com")
                 # - Password must be a fresh OAuth2 access token (manual IAM auth)
                 # - Driver must be pg8000 (connector handles secure networking)
-                kwargs["user"] = iam_user
+                #
+                # Strip .gserviceaccount.com suffix from service account emails for database username
+                db_user = iam_user
+                if ".gserviceaccount.com" in iam_user:
+                    db_user = iam_user.replace(".gserviceaccount.com", "")
+                    logging.getLogger(__name__).info(
+                        f"Stripped .gserviceaccount.com suffix for database username: {iam_user} → {db_user}"
+                    )
+
+                kwargs["user"] = db_user
 
                 # Manually fetch an OAuth2 access token and use it as the password.
                 # This avoids relying on connector-side enable_iam_auth behavior and
