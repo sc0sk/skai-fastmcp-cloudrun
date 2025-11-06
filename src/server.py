@@ -90,7 +90,6 @@ if os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() != "true":
     if os.getenv("FASTMCP_SERVER_AUTH") == "fastmcp.server.auth.providers.github.GitHubProvider":
         try:
             from fastmcp.server.auth.providers.github import GitHubProvider
-            from src.auth.postgres_oauth_storage import PostgresOAuthStorage
             import logging
 
             # Get logger for this module
@@ -101,12 +100,13 @@ if os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() != "true":
             # FASTMCP_SERVER_AUTH_GITHUB_CLIENT_SECRET
             # FASTMCP_SERVER_AUTH_GITHUB_BASE_URL
             #
-            # Use PostgreSQL-backed storage for OAuth client registrations
-            # (persists across Cloud Run container restarts)
-            client_storage = PostgresOAuthStorage()
-            auth_provider = GitHubProvider(client_storage=client_storage)
-            print("✅ GitHub OAuth authentication enabled (PostgreSQL client storage)")
-            logger.info("GitHub OAuth authentication enabled", extra={"client_storage": "postgresql"})
+            # NOTE: FastMCP 2.12.5 doesn't support custom client_storage parameter.
+            # OAuth clients are stored on disk and will be lost on Cloud Run restarts.
+            # ChatGPT will need to re-authenticate after each deployment.
+            # TODO: Upgrade to FastMCP 2.14+ for PostgreSQL-backed OAuth storage.
+            auth_provider = GitHubProvider()
+            print("✅ GitHub OAuth authentication enabled (disk storage - ephemeral)")
+            logger.info("GitHub OAuth authentication enabled", extra={"client_storage": "disk"})
         except ImportError as e:
             print(f"⚠️  Warning: GitHub OAuth provider not available: {e}")
     else:
