@@ -201,6 +201,10 @@ async def oauth_protected_resource_metadata(request: Request):
     if not base_url:
         scheme = "https" if request.headers.get("x-forwarded-proto") == "https" or os.getenv("PORT") else request.url.scheme
         base_url = scheme + "://" + request.url.netloc
+    
+    # Normalize base URL: remove trailing slash for consistent URL construction
+    base_url = base_url.rstrip('/')
+    
     # MCP HTTP base path (resource) – FastMCP HTTP endpoints are served from the same origin
     resource_url = f"{base_url}/mcp"
     body = {
@@ -214,6 +218,53 @@ async def oauth_protected_resource_metadata(request: Request):
     return JSONResponse(body)
 
 # (Route registered via decorator above) OAuth 2.0 Protected Resource Metadata
+
+# DEBUG endpoint: IAM user detection (temporary, remove after debugging)
+@app.route("/debug/iam-user", methods=["GET"])  # type: ignore[misc]
+async def debug_iam_user(request: Request):
+    """Debug endpoint to show IAM user detection in Cloud Run."""
+    import google.auth
+    
+    info = {
+        "env": {
+            "USE_IAM_AUTH": os.getenv("USE_IAM_AUTH"),
+            "CLOUDSQL_USER": os.getenv("CLOUDSQL_USER", "NOT SET"),
+            "K_SERVICE": os.getenv("K_SERVICE", "NOT SET"),
+        },
+        "detection": {}
+    }
+    
+    # Try google.auth.default()
+    try:
+        credentials, project = google.auth.default()
+        info["detection"]["credentials_type"] = type(credentials).__name__
+        info["detection"]["project"] = project
+        
+        if hasattr(credentials, 'service_account_email'):
+            info["detection"]["service_account_email"] = credentials.service_account_email
+        elif hasattr(credentials, '_service_account_email'):
+            info["detection"]["service_account_email"] = credentials._service_account_email
+        else:
+            info["detection"]["service_account_email"] = "NOT FOUND"
+            info["detection"]["available_attrs"] = [a for a in dir(credentials) if not a.startswith('_')][:20]
+    except Exception as e:
+        info["detection"]["google_auth_error"] = str(e)
+    
+    # Try metadata server
+    if os.getenv('K_SERVICE'):
+        try:
+            import requests
+            metadata_url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email"
+            headers = {"Metadata-Flavor": "Google"}
+            response = requests.get(metadata_url, headers=headers, timeout=1)
+            if response.status_code == 200:
+                info["detection"]["metadata_server_email"] = response.text.strip()
+            else:
+                info["detection"]["metadata_server_error"] = f"HTTP {response.status_code}"
+        except Exception as e:
+            info["detection"]["metadata_server_error"] = str(e)
+    
+    return JSONResponse(info)
 
 # The server is ready to be run with:
 # DANGEROUSLY_OMIT_AUTH=true fastmcp dev src/server.py (local dev)
