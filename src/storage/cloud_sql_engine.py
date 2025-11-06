@@ -1,7 +1,7 @@
 """Cloud SQL SQLAlchemy engine factory (IAM-ready).
 
 Creates a SQLAlchemy 2.x Engine for Cloud SQL PostgreSQL using the
-Google Cloud SQL Python Connector with psycopg3 driver.
+Google Cloud SQL Python Connector with pg8000 driver.
 
 Key Features:
 - IAM Database Authentication (preferred, no password storage)
@@ -41,7 +41,7 @@ Configuration Requirements:
 - Required IAM role: roles/cloudsql.client (for Connector)
 - Required database role: cloudsqlsuperuser or custom role with CONNECT
 - Cloud SQL instance must have public IP or private VPC access
-- psycopg[binary]>=3.1.0 required for driver
+- pg8000>=1.30.0 required for driver
 
 Connection Pooling:
 - Default pool_size=5: Max 5 active connections per instance
@@ -66,6 +66,7 @@ Troubleshooting:
 from __future__ import annotations
 
 from typing import Optional
+import logging
 
 from google.cloud.sql.connector import Connector
 from sqlalchemy import create_engine
@@ -174,44 +175,44 @@ class CloudSQLEngine:
                 # Connector will automatically fetch and refresh IAM tokens
                 # Only pg8000 driver supports this with Cloud SQL Connector v1.18+
                 import google.auth
+                from google.auth.transport.requests import Request as GoogleAuthRequest
 
                 # Get the IAM user (service account email)
                 iam_user = None
 
-                # Try getting from default credentials (works in Cloud Run)
-                try:
-                    credentials, project = google.auth.default()
-                    # Service account credentials have service_account_email
-                    if hasattr(credentials, 'service_account_email'):
-                        iam_user = credentials.service_account_email
-                    elif hasattr(credentials, '_service_account_email'):
-                        iam_user = credentials._service_account_email
-                    # For user credentials, prefer the service account if we can
-                    # detect it from the environment
-                    elif hasattr(credentials, 'service_account_email'):
-                        iam_user = credentials.service_account_email
-                except Exception:
-                    pass
-
-                # If still no user, check environment variable (Cloud Run sets this)
-                if not iam_user:
-                    # In Cloud Run, service account is available via metadata
-                    # We can also check K_SERVICE env var to detect Cloud Run
-                    if os.getenv('K_SERVICE'):  # Running in Cloud Run
-                        try:
-                            import requests
-                            metadata_url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email"
-                            headers = {"Metadata-Flavor": "Google"}
-                            response = requests.get(metadata_url, headers=headers, timeout=1)
-                            if response.status_code == 200:
-                                iam_user = response.text.strip()
-                        except Exception:
-                            pass
-
-                # Last resort: try gcloud config (local development)
-                if not iam_user:
-                    import subprocess
+                # Priority 1: Try metadata server (most reliable in Cloud Run)
+                if os.getenv('K_SERVICE'):  # Running in Cloud Run
                     try:
+                        import requests
+                        metadata_url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email"
+                        headers = {"Metadata-Flavor": "Google"}
+                        response = requests.get(metadata_url, headers=headers, timeout=1)
+                        if response.status_code == 200:
+                            iam_user = response.text.strip()
+                    except Exception:
+                        pass
+
+                # Priority 2: Try getting from default credentials
+                if not iam_user:
+                    try:
+                        credentials, project = google.auth.default()
+                        # Service account credentials have service_account_email
+                        if hasattr(credentials, 'service_account_email'):
+                            email = credentials.service_account_email
+                            # Filter out "default" placeholder
+                            if email and email != "default":
+                                iam_user = email
+                        elif hasattr(credentials, '_service_account_email'):
+                            email = credentials._service_account_email
+                            if email and email != "default":
+                                iam_user = email
+                    except Exception:
+                        pass
+
+                # Priority 3: Last resort - gcloud config (local development)
+                if not iam_user:
+                    try:
+                        import subprocess
                         result = subprocess.check_output(
                             ['gcloud', 'config', 'get-value', 'account'],
                             text=True,
@@ -228,12 +229,42 @@ class CloudSQLEngine:
 
                 # For Cloud SQL IAM DB Auth with PostgreSQL:
                 # - Database user must be the full IAM principal email (service account)
-                # - enable_iam_auth=True enables pg8000 to use IAM tokens instead of passwords
-                # - Driver must be pg8000 (only driver supporting IAM with connector v1.18)
+                # - Password must be a fresh OAuth2 access token (manual IAM auth)
+                # - Driver must be pg8000 (connector handles secure networking)
                 kwargs["user"] = iam_user
-                kwargs["enable_iam_auth"] = True  # Boolean True per pg8000/connector API
+
+                # Manually fetch an OAuth2 access token and use it as the password.
+                # This avoids relying on connector-side enable_iam_auth behavior and
+                # guarantees pg8000 receives a non-None password (prevents .decode errors).
+                try:
+                    credentials, _ = google.auth.default()
+                    if not getattr(credentials, "valid", False):
+                        credentials.refresh(GoogleAuthRequest())
+                    token = getattr(credentials, "token", None)
+                    if not token:
+                        raise RuntimeError("Failed to obtain IAM access token for DB auth")
+                    kwargs["password"] = token
+                except Exception as e:
+                    # Fall back to connector-managed IAM auth if available
+                    # If this also fails, pg8000 will raise clearly.
+                    kwargs["enable_iam_auth"] = True  # type: ignore[assignment]
+                    logging.getLogger(__name__).warning(
+                        f"Manual IAM token fetch failed ({e}); falling back to enable_iam_auth=True"
+                    )
                 driver = "pg8000"
             
+            # Log connection parameters (non-sensitive)
+            logging.getLogger(__name__).info(
+                "CloudSQLEngine connecting",
+                extra={
+                    "instance": self._instance_conn_name,
+                    "database": self._database,
+                    "driver": driver,
+                    "iam_auth": bool(kwargs.get("enable_iam_auth", False) or bool(kwargs.get("password"))),
+                    "user_present": bool(kwargs.get("user")),
+                },
+            )
+
             return self._connector.connect(
                 self._instance_conn_name,
                 driver=driver,  # pg8000 is the only driver supporting IAM auth

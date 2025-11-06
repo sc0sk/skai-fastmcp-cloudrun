@@ -196,7 +196,7 @@ async def ingest_hansard_speech(
                     "speaker": speech.speaker,
                     "party": speech.party,
                     "chamber": speech.chamber,
-                    "date": speech.date,
+                    "date": speech.date.isoformat() if hasattr(speech.date, 'isoformat') else str(speech.date),  # Convert date to string for JSON
                     "topic_tags": speech.topic_tags,
                     "hansard_reference": speech.hansard_reference,
                     "title": speech.title,
