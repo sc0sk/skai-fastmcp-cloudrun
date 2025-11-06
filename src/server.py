@@ -90,6 +90,7 @@ if os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() != "true":
     if os.getenv("FASTMCP_SERVER_AUTH") == "fastmcp.server.auth.providers.github.GitHubProvider":
         try:
             from fastmcp.server.auth.providers.github import GitHubProvider
+            from src.auth.postgres_oauth_storage import PostgresOAuthStorage
             import logging
 
             # Get logger for this module
@@ -100,12 +101,12 @@ if os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() != "true":
             # FASTMCP_SERVER_AUTH_GITHUB_CLIENT_SECRET
             # FASTMCP_SERVER_AUTH_GITHUB_BASE_URL
             #
-            # Uses default disk-based storage for OAuth client registrations
-            # (persists across restarts in Cloud Run's ephemeral filesystem)
-            # For multi-instance deployments, consider using Redis/PostgreSQL storage
-            auth_provider = GitHubProvider()
-            print("✅ GitHub OAuth authentication enabled (disk-based client storage)")
-            logger.info("GitHub OAuth authentication enabled", extra={"client_storage": "disk"})
+            # Use PostgreSQL-backed storage for OAuth client registrations
+            # (persists across Cloud Run container restarts)
+            client_storage = PostgresOAuthStorage()
+            auth_provider = GitHubProvider(client_storage=client_storage)
+            print("✅ GitHub OAuth authentication enabled (PostgreSQL client storage)")
+            logger.info("GitHub OAuth authentication enabled", extra={"client_storage": "postgresql"})
         except ImportError as e:
             print(f"⚠️  Warning: GitHub OAuth provider not available: {e}")
     else:
