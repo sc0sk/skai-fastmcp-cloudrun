@@ -41,20 +41,41 @@ class PostgreSQLOAuthStorage:
     - async def keys(prefix: str = "") -> list[str]
     """
 
-    def __init__(self, engine=None):
+    def __init__(self, project_id: str, region: str, instance: str, database: str, user: str):
         """
-        Initialize PostgreSQL OAuth storage with CloudSQLEngine.
+        Initialize PostgreSQL OAuth storage with connection pooling.
 
         Args:
-            engine: CloudSQLEngine instance (handles IAM auth and connection pooling)
+            project_id: GCP project ID
+            region: Cloud SQL region
+            instance: Cloud SQL instance name
+            database: Database name
+            user: Database user (for IAM auth)
         """
-        self.engine = engine
+        self.project_id = project_id
+        self.region = region
+        self.instance = instance
+        self.database = database
+        self.user = user
+        self._connector = None
         self._initialized = False
-        logger.info("Initialized PostgreSQL OAuth storage (CloudSQLEngine)")
+        logger.info("Initialized PostgreSQL OAuth storage")
 
-    async def _get_pool(self):
-        """Get asyncpg pool from CloudSQLEngine."""
-        return await self.engine.get_asyncpg_pool()
+    async def _get_conn(self):
+        """Get a new database connection via Cloud SQL Connector."""
+        if self._connector is None:
+            from google.cloud.sql.connector import Connector
+            self._connector = Connector()
+            logger.info("Created Cloud SQL Connector for OAuth storage")
+
+        conn = await self._connector.connect_async(
+            f"{self.project_id}:{self.region}:{self.instance}",
+            "asyncpg",
+            user=self.user,
+            db=self.database,
+            enable_iam_auth=True,
+        )
+        return conn
 
     async def _ensure_table(self):
         """Ensure oauth_clients table exists (called lazily)."""
@@ -62,8 +83,8 @@ class PostgreSQLOAuthStorage:
             return
 
         try:
-            pool = await self._get_pool()
-            async with pool.acquire() as conn:
+            conn = await self._get_conn()
+            try:
                 await conn.execute("""
                     CREATE TABLE IF NOT EXISTS oauth_clients (
                         client_id TEXT PRIMARY KEY,
@@ -77,8 +98,10 @@ class PostgreSQLOAuthStorage:
                     ON oauth_clients(created_at)
                 """)
 
-            self._initialized = True
-            logger.info("OAuth clients table ready")
+                self._initialized = True
+                logger.info("OAuth clients table ready")
+            finally:
+                await conn.close()
 
         except Exception as e:
             logger.error(f"Failed to ensure oauth_clients table: {e}")
@@ -99,8 +122,8 @@ class PostgreSQLOAuthStorage:
         await self._ensure_table()
 
         try:
-            pool = await self._get_pool()
-            async with pool.acquire() as conn:
+            conn = await self._get_conn()
+            try:
                 row = await conn.fetchrow(
                     "SELECT value FROM oauth_clients WHERE client_id = $1",
                     key
@@ -112,6 +135,8 @@ class PostgreSQLOAuthStorage:
 
                 logger.debug(f"OAuth client not found: {key}")
                 return default
+            finally:
+                await conn.close()
 
         except Exception as e:
             logger.error(f"Failed to get OAuth client {key}: {e}")
@@ -128,8 +153,8 @@ class PostgreSQLOAuthStorage:
         await self._ensure_table()
 
         try:
-            pool = await self._get_pool()
-            async with pool.acquire() as conn:
+            conn = await self._get_conn()
+            try:
                 await conn.execute(
                     """
                     INSERT INTO oauth_clients (client_id, value, created_at, updated_at)
@@ -140,7 +165,9 @@ class PostgreSQLOAuthStorage:
                     key, value
                 )
 
-            logger.info(f"Stored OAuth client: {key}")
+                logger.info(f"Stored OAuth client: {key}")
+            finally:
+                await conn.close()
 
         except Exception as e:
             logger.error(f"Failed to store OAuth client {key}: {e}")
@@ -168,14 +195,16 @@ class PostgreSQLOAuthStorage:
         await self._ensure_table()
 
         try:
-            pool = await self._get_pool()
-            async with pool.acquire() as conn:
+            conn = await self._get_conn()
+            try:
                 result = await conn.execute(
                     "DELETE FROM oauth_clients WHERE client_id = $1",
                     key
                 )
 
-            logger.info(f"Deleted OAuth client: {key} (rows affected: {result})")
+                logger.info(f"Deleted OAuth client: {key} (rows affected: {result})")
+            finally:
+                await conn.close()
 
         except Exception as e:
             logger.error(f"Failed to delete OAuth client {key}: {e}")
@@ -194,13 +223,15 @@ class PostgreSQLOAuthStorage:
         await self._ensure_table()
 
         try:
-            pool = await self._get_pool()
-            async with pool.acquire() as conn:
+            conn = await self._get_conn()
+            try:
                 result = await conn.fetchval(
                     "SELECT EXISTS(SELECT 1 FROM oauth_clients WHERE client_id = $1)",
                     key
                 )
                 return bool(result)
+            finally:
+                await conn.close()
 
         except Exception as e:
             logger.error(f"Failed to check existence of OAuth client {key}: {e}")
@@ -219,8 +250,8 @@ class PostgreSQLOAuthStorage:
         await self._ensure_table()
 
         try:
-            pool = await self._get_pool()
-            async with pool.acquire() as conn:
+            conn = await self._get_conn()
+            try:
                 if prefix:
                     rows = await conn.fetch(
                         "SELECT client_id FROM oauth_clients WHERE client_id LIKE $1 ORDER BY created_at DESC",
@@ -234,12 +265,15 @@ class PostgreSQLOAuthStorage:
                 keys = [row['client_id'] for row in rows]
                 logger.debug(f"Listed {len(keys)} OAuth clients with prefix '{prefix}'")
                 return keys
+            finally:
+                await conn.close()
 
         except Exception as e:
             logger.error(f"Failed to list OAuth clients with prefix {prefix}: {e}")
             return []
 
     async def close(self) -> None:
-        """Close the connection pool (handled by CloudSQLEngine)."""
-        # Pool lifecycle is managed by CloudSQLEngine
-        pass
+        """Close the Cloud SQL Connector."""
+        if self._connector:
+            await self._connector.close_async()
+            logger.info("Closed Cloud SQL Connector")
