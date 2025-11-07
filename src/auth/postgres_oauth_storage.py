@@ -168,6 +168,18 @@ class PostgreSQLOAuthStorage:
             logger.error(f"Failed to store OAuth client {key}: {e}")
             raise
 
+    async def put(self, key: str, value: bytes, collection: Optional[str] = None, ttl: Optional[int] = None) -> None:
+        """
+        Store OAuth client data (PydanticAdapter compatibility).
+
+        Args:
+            key: Client identifier
+            value: OAuth client data (bytes)
+            collection: Collection name (ignored, we use a single table)
+            ttl: Time-to-live in seconds (ignored, no expiration)
+        """
+        await self.set(key, value)
+
     async def delete(self, key: str) -> None:
         """
         Delete OAuth client data.
