@@ -1,13 +1,12 @@
 """
 PostgreSQL-backed AsyncKeyValue store using synchronous pg8000 driver.
 
-This avoids event loop issues with asyncpg + Cloud SQL Connector by using
-synchronous database operations wrapped in asyncio.to_thread().
+Uses Unix socket connection with IAM token authentication to avoid
+Cloud SQL Connector event loop issues.
 """
 
 import logging
 from typing import Optional
-from google.cloud.sql.connector import Connector
 import asyncio
 
 logger = logging.getLogger(__name__)
@@ -37,18 +36,37 @@ class PostgreSQLOAuthStorageSync:
         self.instance = instance
         self.database = database
         self.user = user
-        self.connector = Connector()
+        # Unix socket path for Cloud SQL
+        self.unix_socket = f"/cloudsql/{project_id}:{region}:{instance}"
         self._initialized = False
-        logger.info("Initialized PostgreSQL OAuth storage (sync pg8000)")
+        logger.info(f"Initialized PostgreSQL OAuth storage (pg8000 via {self.unix_socket})")
+
+    def _get_iam_token(self):
+        """Get IAM access token for Cloud SQL."""
+        import google.auth
+        import google.auth.transport.requests
+
+        credentials, _ = google.auth.default()
+        # Request Cloud SQL scope
+        if hasattr(credentials, 'refresh'):
+            request = google.auth.transport.requests.Request()
+            credentials.refresh(request)
+
+        return credentials.token
 
     def _get_conn(self):
-        """Get a database connection using pg8000 (synchronous)."""
-        conn = self.connector.connect(
-            f"{self.project_id}:{self.region}:{self.instance}",
-            "pg8000",
+        """Get a database connection using pg8000 via Unix socket."""
+        import pg8000
+
+        # Get IAM token for password
+        password = self._get_iam_token()
+
+        # Connect via Unix socket with IAM token as password
+        conn = pg8000.dbapi.connect(
+            unix_sock=self.unix_socket,
             user=self.user,
-            db=self.database,
-            enable_iam_auth=True,
+            database=self.database,
+            password=password,
         )
         return conn
 
@@ -236,7 +254,6 @@ class PostgreSQLOAuthStorageSync:
             return []
 
     async def close(self) -> None:
-        """Close the Cloud SQL Connector."""
-        if self.connector:
-            self.connector.close()
-            logger.info("Closed Cloud SQL Connector")
+        """Close resources (no persistent connections)."""
+        # No persistent connections to close
+        pass
