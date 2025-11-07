@@ -103,20 +103,13 @@ if os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() != "true":
             # FastMCP 2.13+ supports custom client_storage parameter for persistent OAuth storage.
             # We use PostgreSQL to persist OAuth clients across Cloud Run deployments.
 
-            # Create PostgreSQL-backed OAuth storage with Cloud SQL Connector
-            from src.auth.postgres_oauth_storage import PostgreSQLOAuthStorage
-
-            oauth_storage = PostgreSQLOAuthStorage(
-                project_id=os.getenv('GCP_PROJECT_ID'),
-                region=os.getenv('GCP_REGION'),
-                instance=os.getenv('CLOUDSQL_INSTANCE'),
-                database=os.getenv('CLOUDSQL_DATABASE'),
-                user=os.getenv('CLOUDSQL_USER', 'fastmcp-server'),
-            )
-
-            auth_provider = GitHubProvider(client_storage=oauth_storage)
-            print("✅ GitHub OAuth authentication enabled (PostgreSQL storage - persistent)")
-            logger.info("GitHub OAuth authentication enabled", extra={"client_storage": "postgresql"})
+            # Use default FastMCP OAuth storage (filesystem with encryption)
+            # Note: This is ephemeral in Cloud Run but will work correctly
+            # TODO: Implement persistent storage using Cloud Storage or Firestore
+            auth_provider = GitHubProvider()
+            print("✅ GitHub OAuth authentication enabled (default storage - ephemeral)")
+            print("⚠️  OAuth clients will be lost on container restart")
+            logger.info("GitHub OAuth authentication enabled", extra={"client_storage": "default"})
         except ImportError as e:
             print(f"⚠️  Warning: GitHub OAuth provider not available: {e}")
     else:
