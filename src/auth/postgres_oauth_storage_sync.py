@@ -45,13 +45,19 @@ class PostgreSQLOAuthStorageSync:
         """Get IAM access token for Cloud SQL."""
         import google.auth
         import google.auth.transport.requests
+        from google.auth import compute_engine
 
-        credentials, _ = google.auth.default()
-        # Request Cloud SQL scope
-        if hasattr(credentials, 'refresh'):
+        # Get service account credentials with Cloud SQL scope
+        credentials, project = google.auth.default(
+            scopes=['https://www.googleapis.com/auth/sqlservice.admin']
+        )
+
+        # Refresh token if needed
+        if not credentials.valid:
             request = google.auth.transport.requests.Request()
             credentials.refresh(request)
 
+        logger.debug(f"Retrieved IAM token for user: {self.user}")
         return credentials.token
 
     def _get_conn(self):
