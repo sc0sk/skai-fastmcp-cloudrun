@@ -21,7 +21,7 @@ Usage:
 
 import asyncpg
 import logging
-from typing import Optional
+from typing import Optional, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -41,20 +41,23 @@ class PostgreSQLOAuthStorage:
     - async def keys(prefix: str = "") -> list[str]
     """
 
-    def __init__(self, pool_config: dict):
+    def __init__(self, pool_config: dict = None, connector_factory: Optional[Callable] = None):
         """
         Initialize PostgreSQL OAuth storage with lazy pool creation.
 
         Args:
-            pool_config: Dictionary with asyncpg pool configuration
+            pool_config: Dictionary with asyncpg pool configuration (optional if using connector_factory)
                 - host: Unix socket path or hostname
                 - database: Database name
                 - user: Username (or None for IAM)
                 - password: Password (or None for IAM)
                 - min_size: Minimum pool size
                 - max_size: Maximum pool size
+            connector_factory: Optional async function that returns an asyncpg connection
+                Use this for Cloud SQL Connector with IAM authentication
         """
         self.pool_config = pool_config
+        self.connector_factory = connector_factory
         self.pool: Optional[asyncpg.Pool] = None
         self._initialized = False
         self._pool_lock = None  # Will be created in async context
@@ -75,9 +78,17 @@ class PostgreSQLOAuthStorage:
             if self.pool is not None:
                 return
 
-            # Create pool
-            self.pool = await asyncpg.create_pool(**self.pool_config)
-            logger.info("Created asyncpg pool for OAuth storage")
+            # Create pool using connector factory if provided, otherwise use pool config
+            if self.connector_factory:
+                self.pool = await asyncpg.create_pool(
+                    init=self.connector_factory,
+                    min_size=1,
+                    max_size=5,
+                )
+                logger.info("Created asyncpg pool for OAuth storage (Cloud SQL Connector)")
+            else:
+                self.pool = await asyncpg.create_pool(**self.pool_config)
+                logger.info("Created asyncpg pool for OAuth storage")
 
     async def _ensure_table(self):
         """Ensure oauth_clients table exists (called lazily)."""

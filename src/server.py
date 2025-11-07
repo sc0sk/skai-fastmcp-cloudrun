@@ -105,18 +105,22 @@ if os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() != "true":
 
             # Create PostgreSQL-backed OAuth storage with lazy initialization
             from src.auth.postgres_oauth_storage import PostgreSQLOAuthStorage
+            from google.cloud.sql.connector import Connector
 
-            # Configure storage (pool will be created on first use)
-            pool_config = {
-                "host": f"/cloudsql/{os.getenv('GCP_PROJECT_ID')}:{os.getenv('GCP_REGION')}:{os.getenv('CLOUDSQL_INSTANCE')}",
-                "database": os.getenv('CLOUDSQL_DATABASE', 'hansard'),
-                "user": os.getenv('CLOUDSQL_USER', 'fastmcp-server'),
-                "password": None,  # IAM authentication (no password)
-                "min_size": 1,
-                "max_size": 5,
-            }
+            # Create Cloud SQL Connector factory for IAM authentication
+            async def get_oauth_connection():
+                """Create Cloud SQL connection with IAM auth for OAuth storage."""
+                connector = Connector()
+                conn = await connector.connect_async(
+                    f"{os.getenv('GCP_PROJECT_ID')}:{os.getenv('GCP_REGION')}:{os.getenv('CLOUDSQL_INSTANCE')}",
+                    "asyncpg",
+                    user=os.getenv('CLOUDSQL_USER', 'fastmcp-server'),
+                    db=os.getenv('CLOUDSQL_DATABASE', 'hansard'),
+                    enable_iam_auth=True,
+                )
+                return conn
 
-            oauth_storage = PostgreSQLOAuthStorage(pool_config)
+            oauth_storage = PostgreSQLOAuthStorage(connector_factory=get_oauth_connection)
 
             auth_provider = GitHubProvider(client_storage=oauth_storage)
             print("✅ GitHub OAuth authentication enabled (PostgreSQL storage - persistent)")
