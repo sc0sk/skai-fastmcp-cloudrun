@@ -61,7 +61,9 @@ class FirestoreOAuthStorage:
                 data = doc.to_dict()
                 value = data.get('value')
                 logger.debug(f"Retrieved OAuth client: {key}")
-                return value if isinstance(value, bytes) else default
+                # FastMCP's PydanticAdapter may store as dict or bytes
+                # Return the value regardless of type - the adapter will handle it
+                return value if value is not None else default
 
             logger.debug(f"OAuth client not found: {key}")
             return default
