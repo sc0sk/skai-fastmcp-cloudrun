@@ -103,24 +103,21 @@ if os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() != "true":
             # FastMCP 2.13+ supports custom client_storage parameter for persistent OAuth storage.
             # We use PostgreSQL to persist OAuth clients across Cloud Run deployments.
 
-            # Create PostgreSQL-backed OAuth storage with lazy initialization
+            # Create PostgreSQL-backed OAuth storage using CloudSQLEngine
             from src.auth.postgres_oauth_storage import PostgreSQLOAuthStorage
-            from google.cloud.sql.connector import Connector
+            from src.storage.cloud_sql_engine import CloudSQLEngine
 
-            # Create Cloud SQL Connector factory for IAM authentication
-            async def get_oauth_connection():
-                """Create Cloud SQL connection with IAM auth for OAuth storage."""
-                connector = Connector()
-                conn = await connector.connect_async(
-                    f"{os.getenv('GCP_PROJECT_ID')}:{os.getenv('GCP_REGION')}:{os.getenv('CLOUDSQL_INSTANCE')}",
-                    "asyncpg",
-                    user=os.getenv('CLOUDSQL_USER', 'fastmcp-server'),
-                    db=os.getenv('CLOUDSQL_DATABASE', 'hansard'),
-                    enable_iam_auth=True,
-                )
-                return conn
+            # Reuse CloudSQLEngine for OAuth storage (handles IAM auth correctly)
+            oauth_engine = CloudSQLEngine(
+                project_id=os.getenv('GCP_PROJECT_ID'),
+                region=os.getenv('GCP_REGION'),
+                instance=os.getenv('CLOUDSQL_INSTANCE'),
+                database=os.getenv('CLOUDSQL_DATABASE'),
+                user=os.getenv('CLOUDSQL_USER', 'fastmcp-server'),
+                password=None,  # IAM authentication
+            )
 
-            oauth_storage = PostgreSQLOAuthStorage(connector_factory=get_oauth_connection)
+            oauth_storage = PostgreSQLOAuthStorage(engine=oauth_engine)
 
             auth_provider = GitHubProvider(client_storage=oauth_storage)
             print("✅ GitHub OAuth authentication enabled (PostgreSQL storage - persistent)")

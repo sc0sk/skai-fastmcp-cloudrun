@@ -41,54 +41,20 @@ class PostgreSQLOAuthStorage:
     - async def keys(prefix: str = "") -> list[str]
     """
 
-    def __init__(self, pool_config: dict = None, connector_factory: Optional[Callable] = None):
+    def __init__(self, engine=None):
         """
-        Initialize PostgreSQL OAuth storage with lazy pool creation.
+        Initialize PostgreSQL OAuth storage with CloudSQLEngine.
 
         Args:
-            pool_config: Dictionary with asyncpg pool configuration (optional if using connector_factory)
-                - host: Unix socket path or hostname
-                - database: Database name
-                - user: Username (or None for IAM)
-                - password: Password (or None for IAM)
-                - min_size: Minimum pool size
-                - max_size: Maximum pool size
-            connector_factory: Optional async function that returns an asyncpg connection
-                Use this for Cloud SQL Connector with IAM authentication
+            engine: CloudSQLEngine instance (handles IAM auth and connection pooling)
         """
-        self.pool_config = pool_config
-        self.connector_factory = connector_factory
-        self.pool: Optional[asyncpg.Pool] = None
+        self.engine = engine
         self._initialized = False
-        self._pool_lock = None  # Will be created in async context
-        logger.info("Initialized PostgreSQL OAuth storage (lazy pool creation)")
+        logger.info("Initialized PostgreSQL OAuth storage (CloudSQLEngine)")
 
-    async def _ensure_pool(self):
-        """Ensure connection pool exists (lazy initialization)."""
-        if self.pool is not None:
-            return
-
-        # Create lock if needed
-        if self._pool_lock is None:
-            import asyncio
-            self._pool_lock = asyncio.Lock()
-
-        async with self._pool_lock:
-            # Double-check after acquiring lock
-            if self.pool is not None:
-                return
-
-            # Create pool using connector factory if provided, otherwise use pool config
-            if self.connector_factory:
-                self.pool = await asyncpg.create_pool(
-                    init=self.connector_factory,
-                    min_size=1,
-                    max_size=5,
-                )
-                logger.info("Created asyncpg pool for OAuth storage (Cloud SQL Connector)")
-            else:
-                self.pool = await asyncpg.create_pool(**self.pool_config)
-                logger.info("Created asyncpg pool for OAuth storage")
+    async def _get_pool(self):
+        """Get asyncpg pool from CloudSQLEngine."""
+        return await self.engine.get_asyncpg_pool()
 
     async def _ensure_table(self):
         """Ensure oauth_clients table exists (called lazily)."""
@@ -96,7 +62,8 @@ class PostgreSQLOAuthStorage:
             return
 
         try:
-            async with self.pool.acquire() as conn:
+            pool = await self._get_pool()
+            async with pool.acquire() as conn:
                 await conn.execute("""
                     CREATE TABLE IF NOT EXISTS oauth_clients (
                         client_id TEXT PRIMARY KEY,
@@ -129,11 +96,11 @@ class PostgreSQLOAuthStorage:
         Returns:
             Stored bytes value or default
         """
-        await self._ensure_pool()
         await self._ensure_table()
 
         try:
-            async with self.pool.acquire() as conn:
+            pool = await self._get_pool()
+            async with pool.acquire() as conn:
                 row = await conn.fetchrow(
                     "SELECT value FROM oauth_clients WHERE client_id = $1",
                     key
@@ -158,11 +125,11 @@ class PostgreSQLOAuthStorage:
             key: Client identifier
             value: OAuth client data (bytes)
         """
-        await self._ensure_pool()
         await self._ensure_table()
 
         try:
-            async with self.pool.acquire() as conn:
+            pool = await self._get_pool()
+            async with pool.acquire() as conn:
                 await conn.execute(
                     """
                     INSERT INTO oauth_clients (client_id, value, created_at, updated_at)
@@ -198,11 +165,11 @@ class PostgreSQLOAuthStorage:
         Args:
             key: Client identifier to delete
         """
-        await self._ensure_pool()
         await self._ensure_table()
 
         try:
-            async with self.pool.acquire() as conn:
+            pool = await self._get_pool()
+            async with pool.acquire() as conn:
                 result = await conn.execute(
                     "DELETE FROM oauth_clients WHERE client_id = $1",
                     key
@@ -224,11 +191,11 @@ class PostgreSQLOAuthStorage:
         Returns:
             True if key exists, False otherwise
         """
-        await self._ensure_pool()
         await self._ensure_table()
 
         try:
-            async with self.pool.acquire() as conn:
+            pool = await self._get_pool()
+            async with pool.acquire() as conn:
                 result = await conn.fetchval(
                     "SELECT EXISTS(SELECT 1 FROM oauth_clients WHERE client_id = $1)",
                     key
@@ -249,11 +216,11 @@ class PostgreSQLOAuthStorage:
         Returns:
             List of matching keys
         """
-        await self._ensure_pool()
         await self._ensure_table()
 
         try:
-            async with self.pool.acquire() as conn:
+            pool = await self._get_pool()
+            async with pool.acquire() as conn:
                 if prefix:
                     rows = await conn.fetch(
                         "SELECT client_id FROM oauth_clients WHERE client_id LIKE $1 ORDER BY created_at DESC",
@@ -273,7 +240,6 @@ class PostgreSQLOAuthStorage:
             return []
 
     async def close(self) -> None:
-        """Close the connection pool."""
-        if self.pool:
-            await self.pool.close()
-            logger.info("Closed PostgreSQL OAuth storage pool")
+        """Close the connection pool (handled by CloudSQLEngine)."""
+        # Pool lifecycle is managed by CloudSQLEngine
+        pass
