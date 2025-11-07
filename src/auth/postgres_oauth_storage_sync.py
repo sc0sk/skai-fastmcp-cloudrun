@@ -36,8 +36,8 @@ class PostgreSQLOAuthStorageSync:
         self.instance = instance
         self.database = database
         self.user = user
-        # Unix socket path for Cloud SQL
-        self.unix_socket = f"/cloudsql/{project_id}:{region}:{instance}"
+        # Unix socket path for Cloud SQL (includes .s.PGSQL.5432)
+        self.unix_socket = f"/cloudsql/{project_id}:{region}:{instance}/.s.PGSQL.5432"
         self._initialized = False
         logger.info(f"Initialized PostgreSQL OAuth storage (pg8000 via {self.unix_socket})")
 
