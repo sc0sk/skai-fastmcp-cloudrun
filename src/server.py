@@ -100,13 +100,35 @@ if os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() != "true":
             # FASTMCP_SERVER_AUTH_GITHUB_CLIENT_SECRET
             # FASTMCP_SERVER_AUTH_GITHUB_BASE_URL
             #
-            # NOTE: FastMCP 2.12.5 doesn't support custom client_storage parameter.
-            # OAuth clients are stored on disk and will be lost on Cloud Run restarts.
-            # ChatGPT will need to re-authenticate after each deployment.
-            # TODO: Upgrade to FastMCP 2.14+ for PostgreSQL-backed OAuth storage.
-            auth_provider = GitHubProvider()
-            print("✅ GitHub OAuth authentication enabled (disk storage - ephemeral)")
-            logger.info("GitHub OAuth authentication enabled", extra={"client_storage": "disk"})
+            # FastMCP 2.13+ supports custom client_storage parameter for persistent OAuth storage.
+            # We use PostgreSQL to persist OAuth clients across Cloud Run deployments.
+
+            # Create PostgreSQL-backed OAuth storage
+            import asyncio
+            import asyncpg
+            from src.auth.postgres_oauth_storage import PostgreSQLOAuthStorage
+
+            async def create_oauth_storage():
+                """Create PostgreSQL OAuth storage with asyncpg pool."""
+                # Connect via Cloud SQL Unix socket with IAM authentication
+                pool = await asyncpg.create_pool(
+                    host=f"/cloudsql/{os.getenv('GCP_PROJECT_ID')}:{os.getenv('GCP_REGION')}:{os.getenv('CLOUDSQL_INSTANCE')}",
+                    database=os.getenv('CLOUDSQL_DATABASE', 'hansard'),
+                    user=os.getenv('CLOUDSQL_USER', 'fastmcp-server'),
+                    password=None,  # IAM authentication (no password)
+                    min_size=1,
+                    max_size=5,
+                )
+                logger.info("Created asyncpg pool for OAuth storage")
+                return PostgreSQLOAuthStorage(pool)
+
+            # Initialize storage at module load time (no event loop running yet)
+            oauth_storage = asyncio.run(create_oauth_storage())
+            logger.info("OAuth storage initialized successfully")
+
+            auth_provider = GitHubProvider(client_storage=oauth_storage)
+            print("✅ GitHub OAuth authentication enabled (PostgreSQL storage - persistent)")
+            logger.info("GitHub OAuth authentication enabled", extra={"client_storage": "postgresql"})
         except ImportError as e:
             print(f"⚠️  Warning: GitHub OAuth provider not available: {e}")
     else:
@@ -118,10 +140,12 @@ else:
 mcp = FastMCP("Hansard MCP Server", auth=auth_provider, lifespan=lifespan)
 
 # Add GitHub access control middleware (restrict to allowed usernames/emails)
-if auth_provider and not os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() == "true":
-    from src.auth.github_middleware import GitHubAccessControlMiddleware
-    mcp.add_middleware(GitHubAccessControlMiddleware)
-    print("✅ GitHub access control middleware enabled")
+# TEMPORARILY DISABLED: BaseHTTPMiddleware incompatibility with FastMCP
+# if auth_provider and not os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() == "true":
+#     from src.auth.github_middleware import GitHubAccessControlMiddleware
+#     mcp.add_middleware(GitHubAccessControlMiddleware)
+#     print("✅ GitHub access control middleware enabled")
+print("⚠️  GitHub access control middleware temporarily disabled (compatibility issue)")
 
 # Register search tool with ChatGPT Developer Mode enhancements
 # Note: icon parameter not supported in FastMCP 2.12.5, icons stored in metadata for future use
@@ -191,37 +215,9 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-# Add OAuth 2.0 Protected Resource Metadata endpoint (2025-DRAFT-v2)
-# See: https://datatracker.ietf.org/doc/draft-ietf-oauth-resource-metadata/
-@app.route("/.well-known/oauth-protected-resource", methods=["GET"])  # type: ignore[misc]
-async def oauth_protected_resource_metadata(request: Request):
-    """Expose OAuth Protected Resource Metadata for MCP Inspector.
-
-    Returns a minimal metadata document advertising this resource server and
-    its associated authorization server (same base URL in our deployment).
-    """
-    # Force HTTPS for production (Cloud Run is always HTTPS externally, even if HTTP internally)
-    base_url = os.getenv("FASTMCP_SERVER_AUTH_GITHUB_BASE_URL", "")
-    if not base_url:
-        scheme = "https" if request.headers.get("x-forwarded-proto") == "https" or os.getenv("PORT") else request.url.scheme
-        base_url = scheme + "://" + request.url.netloc
-    
-    # Normalize base URL: remove trailing slash for consistent URL construction
-    base_url = base_url.rstrip('/')
-    
-    # MCP HTTP base path (resource) – FastMCP HTTP endpoints are served from the same origin
-    resource_url = f"{base_url}/mcp"
-    body = {
-        "resource": resource_url,
-        "authorization_servers": [
-            f"{base_url}/"
-        ],
-        # Optional: align with AS metadata already exposed at
-        # /.well-known/oauth-authorization-server on the same origin.
-    }
-    return JSONResponse(body)
-
-# (Route registered via decorator above) OAuth 2.0 Protected Resource Metadata
+# NOTE: All OAuth endpoints (/.well-known/oauth-*, /oauth/*, /register)
+# are automatically provided by FastMCP's GitHubProvider
+# No custom OAuth routes needed - FastMCP handles everything
 
 # DEBUG endpoint: IAM user detection (temporary, remove after debugging)
 @app.route("/debug/iam-user", methods=["GET"])  # type: ignore[misc]
