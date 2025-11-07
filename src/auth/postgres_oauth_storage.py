@@ -63,10 +63,20 @@ class PostgreSQLOAuthStorage:
 
     async def _get_conn(self):
         """Get a new database connection via Cloud SQL Connector."""
-        if self._connector is None:
+        # Create Connector in the current event loop if needed
+        import asyncio
+        current_loop = asyncio.get_event_loop()
+
+        if self._connector is None or getattr(self._connector, '_loop', None) != current_loop:
             from google.cloud.sql.connector import Connector
+            # Close old connector if it exists
+            if self._connector is not None:
+                try:
+                    await self._connector.close_async()
+                except:
+                    pass
             self._connector = Connector()
-            logger.info("Created Cloud SQL Connector for OAuth storage")
+            logger.info(f"Created Cloud SQL Connector for OAuth storage (loop: {id(current_loop)})")
 
         conn = await self._connector.connect_async(
             f"{self.project_id}:{self.region}:{self.instance}",
