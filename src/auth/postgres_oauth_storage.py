@@ -106,13 +106,14 @@ class PostgreSQLOAuthStorage:
             logger.error(f"Failed to ensure oauth_clients table: {e}")
             raise
 
-    async def get(self, key: str, default: Optional[bytes] = None) -> Optional[bytes]:
+    async def get(self, key: str, default: Optional[bytes] = None, collection: Optional[str] = None) -> Optional[bytes]:
         """
         Retrieve OAuth client data by key.
 
         Args:
             key: Client identifier
             default: Default value if key not found
+            collection: Collection name (ignored, we use a single table)
 
         Returns:
             Stored bytes value or default
