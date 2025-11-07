@@ -61,9 +61,10 @@ class PostgreSQLOAuthStorage:
         logger.info("Initialized PostgreSQL OAuth storage")
 
     async def _get_conn(self):
-        """Get a new database connection via Cloud SQL Connector."""
-        # Always create a new Connector to avoid event loop issues
-        # The Connector must be created in the same event loop where it's used
+        """Get a new database connection via Cloud SQL Connector.
+
+        Note: Creates fresh Connector per call to avoid event loop mismatches.
+        """
         from google.cloud.sql.connector import Connector
 
         connector = Connector()
