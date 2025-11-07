@@ -57,35 +57,29 @@ class PostgreSQLOAuthStorage:
         self.instance = instance
         self.database = database
         self.user = user
-        self._connector = None
         self._initialized = False
         logger.info("Initialized PostgreSQL OAuth storage")
 
     async def _get_conn(self):
         """Get a new database connection via Cloud SQL Connector."""
-        # Create Connector in the current event loop if needed
-        import asyncio
-        current_loop = asyncio.get_event_loop()
+        # Always create a new Connector to avoid event loop issues
+        # The Connector must be created in the same event loop where it's used
+        from google.cloud.sql.connector import Connector
 
-        if self._connector is None or getattr(self._connector, '_loop', None) != current_loop:
-            from google.cloud.sql.connector import Connector
-            # Close old connector if it exists
-            if self._connector is not None:
-                try:
-                    await self._connector.close_async()
-                except:
-                    pass
-            self._connector = Connector()
-            logger.info(f"Created Cloud SQL Connector for OAuth storage (loop: {id(current_loop)})")
-
-        conn = await self._connector.connect_async(
-            f"{self.project_id}:{self.region}:{self.instance}",
-            "asyncpg",
-            user=self.user,
-            db=self.database,
-            enable_iam_auth=True,
-        )
-        return conn
+        connector = Connector()
+        try:
+            conn = await connector.connect_async(
+                f"{self.project_id}:{self.region}:{self.instance}",
+                "asyncpg",
+                user=self.user,
+                db=self.database,
+                enable_iam_auth=True,
+            )
+            return conn
+        finally:
+            # Close connector after getting connection
+            # The connection itself remains open
+            await connector.close_async()
 
     async def _ensure_table(self):
         """Ensure oauth_clients table exists (called lazily)."""
@@ -283,7 +277,6 @@ class PostgreSQLOAuthStorage:
             return []
 
     async def close(self) -> None:
-        """Close the Cloud SQL Connector."""
-        if self._connector:
-            await self._connector.close_async()
-            logger.info("Closed Cloud SQL Connector")
+        """Close resources (no-op - connectors are per-connection)."""
+        # Connectors are created and closed per-connection
+        pass
