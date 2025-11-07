@@ -202,7 +202,34 @@ app.add_middleware(
 
 # NOTE: All OAuth endpoints (/.well-known/oauth-*, /oauth/*, /register)
 # are automatically provided by FastMCP's GitHubProvider
-# No custom OAuth routes needed - FastMCP handles everything
+# OAuth 2.0 Protected Resource Metadata endpoint (RFC 9728)
+# Required by MCP specification 2025-06-18
+@app.route("/.well-known/oauth-protected-resource", methods=["GET"])  # type: ignore[misc]
+async def oauth_protected_resource(request: Request):
+    """
+    OAuth 2.0 Protected Resource Metadata (RFC 9728).
+
+    Returns metadata about this protected resource including:
+    - Resource identifier (this server's base URL)
+    - Authorized authorization servers
+    - Supported scopes
+    - Bearer token methods
+
+    This endpoint enables OAuth clients to discover how to authenticate
+    with this MCP server.
+    """
+    # Get base URL from request (works for both local and Cloud Run)
+    base_url = str(request.base_url).rstrip('/')
+
+    metadata = {
+        "resource": base_url,
+        "authorization_servers": [base_url],
+        "scopes_supported": ["read", "write", "user"],
+        "bearer_methods_supported": ["header"],
+        "resource_documentation": f"{base_url}/docs" if base_url else None,
+    }
+
+    return JSONResponse(metadata)
 
 # DEBUG endpoint: IAM user detection (temporary, remove after debugging)
 @app.route("/debug/iam-user", methods=["GET"])  # type: ignore[misc]
