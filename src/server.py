@@ -103,28 +103,20 @@ if os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() != "true":
             # FastMCP 2.13+ supports custom client_storage parameter for persistent OAuth storage.
             # We use PostgreSQL to persist OAuth clients across Cloud Run deployments.
 
-            # Create PostgreSQL-backed OAuth storage
-            import asyncio
-            import asyncpg
+            # Create PostgreSQL-backed OAuth storage with lazy initialization
             from src.auth.postgres_oauth_storage import PostgreSQLOAuthStorage
 
-            async def create_oauth_storage():
-                """Create PostgreSQL OAuth storage with asyncpg pool."""
-                # Connect via Cloud SQL Unix socket with IAM authentication
-                pool = await asyncpg.create_pool(
-                    host=f"/cloudsql/{os.getenv('GCP_PROJECT_ID')}:{os.getenv('GCP_REGION')}:{os.getenv('CLOUDSQL_INSTANCE')}",
-                    database=os.getenv('CLOUDSQL_DATABASE', 'hansard'),
-                    user=os.getenv('CLOUDSQL_USER', 'fastmcp-server'),
-                    password=None,  # IAM authentication (no password)
-                    min_size=1,
-                    max_size=5,
-                )
-                logger.info("Created asyncpg pool for OAuth storage")
-                return PostgreSQLOAuthStorage(pool)
+            # Configure storage (pool will be created on first use)
+            pool_config = {
+                "host": f"/cloudsql/{os.getenv('GCP_PROJECT_ID')}:{os.getenv('GCP_REGION')}:{os.getenv('CLOUDSQL_INSTANCE')}",
+                "database": os.getenv('CLOUDSQL_DATABASE', 'hansard'),
+                "user": os.getenv('CLOUDSQL_USER', 'fastmcp-server'),
+                "password": None,  # IAM authentication (no password)
+                "min_size": 1,
+                "max_size": 5,
+            }
 
-            # Initialize storage at module load time (no event loop running yet)
-            oauth_storage = asyncio.run(create_oauth_storage())
-            logger.info("OAuth storage initialized successfully")
+            oauth_storage = PostgreSQLOAuthStorage(pool_config)
 
             auth_provider = GitHubProvider(client_storage=oauth_storage)
             print("✅ GitHub OAuth authentication enabled (PostgreSQL storage - persistent)")

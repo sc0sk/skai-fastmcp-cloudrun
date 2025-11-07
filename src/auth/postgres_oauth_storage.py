@@ -41,16 +41,43 @@ class PostgreSQLOAuthStorage:
     - async def keys(prefix: str = "") -> list[str]
     """
 
-    def __init__(self, pool: asyncpg.Pool):
+    def __init__(self, pool_config: dict):
         """
-        Initialize PostgreSQL OAuth storage.
+        Initialize PostgreSQL OAuth storage with lazy pool creation.
 
         Args:
-            pool: asyncpg connection pool
+            pool_config: Dictionary with asyncpg pool configuration
+                - host: Unix socket path or hostname
+                - database: Database name
+                - user: Username (or None for IAM)
+                - password: Password (or None for IAM)
+                - min_size: Minimum pool size
+                - max_size: Maximum pool size
         """
-        self.pool = pool
+        self.pool_config = pool_config
+        self.pool: Optional[asyncpg.Pool] = None
         self._initialized = False
-        logger.info("Initialized PostgreSQL OAuth storage")
+        self._pool_lock = None  # Will be created in async context
+        logger.info("Initialized PostgreSQL OAuth storage (lazy pool creation)")
+
+    async def _ensure_pool(self):
+        """Ensure connection pool exists (lazy initialization)."""
+        if self.pool is not None:
+            return
+
+        # Create lock if needed
+        if self._pool_lock is None:
+            import asyncio
+            self._pool_lock = asyncio.Lock()
+
+        async with self._pool_lock:
+            # Double-check after acquiring lock
+            if self.pool is not None:
+                return
+
+            # Create pool
+            self.pool = await asyncpg.create_pool(**self.pool_config)
+            logger.info("Created asyncpg pool for OAuth storage")
 
     async def _ensure_table(self):
         """Ensure oauth_clients table exists (called lazily)."""
@@ -90,6 +117,7 @@ class PostgreSQLOAuthStorage:
         Returns:
             Stored bytes value or default
         """
+        await self._ensure_pool()
         await self._ensure_table()
 
         try:
@@ -118,6 +146,7 @@ class PostgreSQLOAuthStorage:
             key: Client identifier
             value: OAuth client data (bytes)
         """
+        await self._ensure_pool()
         await self._ensure_table()
 
         try:
@@ -145,6 +174,7 @@ class PostgreSQLOAuthStorage:
         Args:
             key: Client identifier to delete
         """
+        await self._ensure_pool()
         await self._ensure_table()
 
         try:
@@ -170,6 +200,7 @@ class PostgreSQLOAuthStorage:
         Returns:
             True if key exists, False otherwise
         """
+        await self._ensure_pool()
         await self._ensure_table()
 
         try:
@@ -194,6 +225,7 @@ class PostgreSQLOAuthStorage:
         Returns:
             List of matching keys
         """
+        await self._ensure_pool()
         await self._ensure_table()
 
         try:
