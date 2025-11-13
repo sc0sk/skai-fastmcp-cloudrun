@@ -10,8 +10,8 @@ Auto-generated from all feature plans. Last updated: 2025-10-22
 - N/A (metadata optimization only, no database changes) (005-chatgpt-integration)
 - Python 3.11+ (Cloud Run compatibility requirement) + PyJWT (JWT validation), cryptography (RSA/ECDSA keys), httpx (HTTP introspection), Pydantic v2 (schemas), FastMCP 2.12.0+ (auth provider framework) (010-token-verification)
 - N/A (stateless token validation, no persistent storage required) (010-token-verification)
-- Python 3.11+ (Cloud Run compatibility) + FastMCP 2.13.0, py-key-value-aio 0.2.8+, cryptography 41.0.0+ (001-fastmcp-oauth-persistence)
-- Cloud SQL PostgreSQL with existing `oauth_clients` table (001-fastmcp-oauth-persistence)
+- Python 3.11+ (Cloud Run compatibility) + FastMCP 2.13.0, py-key-value-aio 0.2.8+, cryptography 41.0.0+ (022-fastmcp-oauth-persistence)
+- Cloud SQL PostgreSQL with existing `oauth_clients` table (022-fastmcp-oauth-persistence)
 
 ## Project Structure
 ```
@@ -26,13 +26,13 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11+ (Cloud Run compatibility): Follow standard conventions
 
 ## Recent Changes
-- 001-fastmcp-oauth-persistence: Added Python 3.11+ (Cloud Run compatibility) + FastMCP 2.13.0, py-key-value-aio 0.2.8+, cryptography 41.0.0+
-- 019-fix-cloudrun-db-auth: Added Cloud Run IAM authentication tracking for Cloud SQL PostgreSQL connections
+- 022-fastmcp-oauth-persistence: Added Python 3.11+ (Cloud Run compatibility) + FastMCP 2.13.0, py-key-value-aio 0.2.8+, cryptography 41.0.0+
+- 020-fix-cloudrun-db-auth: Added Cloud Run IAM authentication tracking for Cloud SQL PostgreSQL connections
 - 012-admin-markdown-ingestion: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 
 <!-- MANUAL ADDITIONS START -->
 
-## Cloud Run IAM Authentication (Feature 019)
+## Cloud Run IAM Authentication (Feature 020)
 
 ### IAM Detection for Cloud SQL
 
@@ -135,10 +135,10 @@ curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
 
 ### Documentation
 
-- **Specification**: [specs/019-fix-cloudrun-db-auth/spec.md](specs/019-fix-cloudrun-db-auth/spec.md)
-- **Implementation Plan**: [specs/019-fix-cloudrun-db-auth/plan.md](specs/019-fix-cloudrun-db-auth/plan.md)
-- **Testing Guide**: [specs/019-fix-cloudrun-db-auth/quickstart.md](specs/019-fix-cloudrun-db-auth/quickstart.md)
-- **Implementation Checklist**: [specs/019-fix-cloudrun-db-auth/checklists/implementation.md](specs/019-fix-cloudrun-db-auth/checklists/implementation.md)
+- **Specification**: [specs/020-fix-cloudrun-db-auth/spec.md](specs/020-fix-cloudrun-db-auth/spec.md)
+- **Implementation Plan**: [specs/020-fix-cloudrun-db-auth/plan.md](specs/020-fix-cloudrun-db-auth/plan.md)
+- **Testing Guide**: [specs/020-fix-cloudrun-db-auth/quickstart.md](specs/020-fix-cloudrun-db-auth/quickstart.md)
+- **Implementation Checklist**: [specs/020-fix-cloudrun-db-auth/checklists/implementation.md](specs/020-fix-cloudrun-db-auth/checklists/implementation.md)
 
 <!-- MANUAL ADDITIONS START (preserved from above) -->
 

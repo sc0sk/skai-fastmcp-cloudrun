@@ -101,7 +101,7 @@ if os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() != "true":
             # FASTMCP_SERVER_AUTH_GITHUB_BASE_URL
             #
             # FastMCP 2.13+ supports custom client_storage parameter for persistent OAuth storage.
-            # We use PostgreSQL to persist OAuth clients across Cloud Run deployments.
+            # We use Firestore to persist OAuth clients across Cloud Run deployments.
 
             # Use Firestore OAuth storage (serverless, persistent, no event loop issues)
             from src.auth.firestore_oauth_storage import FirestoreOAuthStorage
@@ -124,13 +124,7 @@ else:
 # Create FastMCP server instance with authentication and lifespan
 mcp = FastMCP("Hansard MCP Server", auth=auth_provider, lifespan=lifespan)
 
-# Add GitHub access control middleware (restrict to allowed usernames/emails)
-# TEMPORARILY DISABLED: BaseHTTPMiddleware incompatibility with FastMCP
-# if auth_provider and not os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() == "true":
-#     from src.auth.github_middleware import GitHubAccessControlMiddleware
-#     mcp.add_middleware(GitHubAccessControlMiddleware)
-#     print("✅ GitHub access control middleware enabled")
-print("⚠️  GitHub access control middleware temporarily disabled (compatibility issue)")
+# GitHub access control middleware will be added after app is created
 
 # Register search tool with ChatGPT Developer Mode enhancements
 # Note: icon parameter not supported in FastMCP 2.12.5, icons stored in metadata for future use
@@ -187,7 +181,6 @@ print("   📝 ingest_hansard_speech [write operation with progress reporting]")
 # print("   📁 ingest_markdown_directory [admin-only bulk directory ingestion]")
 
 # Expose ASGI app for uvicorn (Cloud Run deployment)
-# FastMCP's http_app() method returns the Starlette ASGI application
 app = mcp.http_app()
 
 # Add CORS middleware to allow OAuth flows from browser-based clients
@@ -200,33 +193,38 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-# NOTE: All OAuth endpoints (/.well-known/oauth-*, /oauth/*, /register)
+# Add GitHub access control middleware (restrict to allowed usernames/emails)
+if auth_provider and not os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() == "true":
+    from src.auth.github_middleware import GitHubAccessControlMiddleware
+    app.add_middleware(GitHubAccessControlMiddleware)
+    print("✅ GitHub access control middleware enabled")
+else:
+    print("⚠️  GitHub access control middleware not enabled (no auth provider or DANGEROUSLY_OMIT_AUTH=true)")
+
+# NOTE: All OAuth endpoints (/.well-known/oauth-authorization-server, /oauth/*, /register)
 # are automatically provided by FastMCP's GitHubProvider
-# OAuth 2.0 Protected Resource Metadata endpoint (RFC 9728)
-# Required by MCP specification 2025-06-18
+# We manually add /.well-known/oauth-protected-resource (RFC 9728) for MCP spec compliance
+
 @app.route("/.well-known/oauth-protected-resource", methods=["GET"])  # type: ignore[misc]
 async def oauth_protected_resource(request: Request):
     """
     OAuth 2.0 Protected Resource Metadata (RFC 9728).
-
-    Returns metadata about this protected resource including:
-    - Resource identifier (this server's base URL)
-    - Authorized authorization servers
-    - Supported scopes
-    - Bearer token methods
-
-    This endpoint enables OAuth clients to discover how to authenticate
-    with this MCP server.
+    Required by MCP specification 2025-06-18.
     """
-    # Get base URL from request (works for both local and Cloud Run)
-    base_url = str(request.base_url).rstrip('/')
+    # Get base URL from environment or headers
+    base_url = os.getenv('FASTMCP_SERVER_AUTH_GITHUB_BASE_URL', 'https://hansard-mcp-server-666924716777.us-central1.run.app')
+
+    # Detect protocol from proxy headers (Cloud Run uses SSL termination)
+    proto = request.headers.get('X-Forwarded-Proto', 'https')
+    host = request.headers.get('Host', base_url.replace('https://', '').replace('http://', ''))
+    resource_url = f"{proto}://{host}"
 
     metadata = {
-        "resource": base_url,
-        "authorization_servers": [base_url],
-        "scopes_supported": ["read", "write", "user"],
+        "resource": resource_url,
+        "authorization_servers": [resource_url],
+        "scopes_supported": ["user"],
         "bearer_methods_supported": ["header"],
-        "resource_documentation": f"{base_url}/docs" if base_url else None,
+        "resource_documentation": f"{resource_url}/docs",
     }
 
     return JSONResponse(metadata)
