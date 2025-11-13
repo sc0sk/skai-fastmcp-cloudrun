@@ -10,6 +10,8 @@ Auto-generated from all feature plans. Last updated: 2025-10-22
 - N/A (metadata optimization only, no database changes) (005-chatgpt-integration)
 - Python 3.11+ (Cloud Run compatibility requirement) + PyJWT (JWT validation), cryptography (RSA/ECDSA keys), httpx (HTTP introspection), Pydantic v2 (schemas), FastMCP 2.12.0+ (auth provider framework) (010-token-verification)
 - N/A (stateless token validation, no persistent storage required) (010-token-verification)
+- Python 3.11+ (Cloud Run compatibility) + FastMCP 2.13.0, py-key-value-aio 0.2.8+, cryptography 41.0.0+ (022-fastmcp-oauth-persistence)
+- Cloud SQL PostgreSQL with existing `oauth_clients` table (022-fastmcp-oauth-persistence)
 
 ## Project Structure
 ```
@@ -24,11 +26,121 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11+ (Cloud Run compatibility): Follow standard conventions
 
 ## Recent Changes
+- 022-fastmcp-oauth-persistence: Added Python 3.11+ (Cloud Run compatibility) + FastMCP 2.13.0, py-key-value-aio 0.2.8+, cryptography 41.0.0+
+- 020-fix-cloudrun-db-auth: Added Cloud Run IAM authentication tracking for Cloud SQL PostgreSQL connections
 - 012-admin-markdown-ingestion: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
-- 011-mcp-oauth21-security: Added Python 3.11+ (Cloud Run compatibility)
-- 010-token-verification: Added Python 3.11+ (Cloud Run compatibility requirement) + PyJWT (JWT validation), cryptography (RSA/ECDSA keys), httpx (HTTP introspection), Pydantic v2 (schemas), FastMCP 2.12.0+ (auth provider framework)
 
 <!-- MANUAL ADDITIONS START -->
+
+## Cloud Run IAM Authentication (Feature 020)
+
+### IAM Detection for Cloud SQL
+
+The `CloudSQLEngine` class ([src/storage/cloud_sql_engine.py](src/storage/cloud_sql_engine.py)) implements 3-tier IAM user detection for Cloud SQL PostgreSQL connections:
+
+**Detection Priority**:
+1. **Metadata Service** (Cloud Run) - Primary method for production
+   - Endpoint: `http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email`
+   - Header: `Metadata-Flavor: Google`
+   - Returns: Service account email (e.g., `666924716777-compute@developer.gserviceaccount.com`)
+
+2. **Application Default Credentials (ADC)** - Local development
+   - Method: `google.auth.default()`
+   - Attribute: `credentials.service_account_email` or `credentials._service_account_email`
+   - Filters: Rejects "default" placeholder value
+
+3. **Gcloud Config** - Fallback for local development
+   - Command: `gcloud config get-value account`
+   - Returns: User or service account email from gcloud config
+
+4. **Fallback** - Legacy default (not recommended)
+   - Value: `"postgres"` (requires password authentication)
+   - Marked as invalid (`iam_valid = False`)
+
+### Tracking Properties
+
+The `CloudSQLEngine` class exposes read-only properties for debugging and validation:
+
+```python
+engine_mgr = CloudSQLEngine(...)
+
+# Check IAM detection status
+print(engine_mgr.detected_iam_user)    # Service account email
+print(engine_mgr.detection_method)     # "METADATA_SERVICE" | "ADC_CREDENTIALS" | "GCLOUD_CONFIG" | "FALLBACK"
+print(engine_mgr.iam_valid)            # True if valid email detected, False for "default" or "postgres"
+```
+
+### Testing IAM Detection
+
+**Unit Tests** (Cloud Run environment):
+```bash
+# Mock metadata service and ADC
+pytest tests/test_cloud_run_iam_auth.py -v
+# Tests: metadata service detection, "default" rejection, logging
+```
+
+**Integration Tests** (Local environment):
+```bash
+# Requires valid ADC or gcloud config
+pytest tests/test_local_iam_auth.py -v
+# Tests: ADC detection, gcloud fallback (skipped - requires Connector mock)
+```
+
+**Cloud Run Validation**:
+```bash
+# Debug endpoint shows IAM detection status
+curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
+  https://hansard-mcp-server-666924716777.us-central1.run.app/debug/iam-user
+```
+
+### Best Practices
+
+1. **Always use IAM authentication** (no password storage):
+   ```python
+   engine_mgr = CloudSQLEngine(
+       project_id="...",
+       region="...",
+       instance="...",
+       database="...",
+       user=None,        # Triggers IAM auth
+       password=None,
+   )
+   ```
+
+2. **Check detection status** in debug/troubleshooting:
+   ```python
+   if not engine_mgr.iam_valid:
+       print(f"Warning: IAM detection failed, using {engine_mgr.detected_iam_user}")
+       print(f"Detection method: {engine_mgr.detection_method}")
+   ```
+
+3. **Environment-specific detection**:
+   - Cloud Run: Metadata service (automatic, most reliable)
+   - Local: ADC via `gcloud auth application-default login`
+   - CI/CD: Service account key file (set `GOOGLE_APPLICATION_CREDENTIALS`)
+
+### Common Issues
+
+**Issue**: `detected_iam_user = "default"` in Cloud Run
+- **Cause**: ADC returning placeholder instead of actual email
+- **Fix**: Metadata service takes priority (working as expected)
+
+**Issue**: `iam_valid = False`
+- **Cause**: No valid IAM credentials found
+- **Fix**: Run `gcloud auth application-default login` or ensure Cloud Run service account has permissions
+
+**Issue**: `FATAL: role "..." does not exist` in database
+- **Cause**: Database user not created for service account email
+- **Fix**: Run `CREATE USER "email@..." WITH LOGIN;` and `GRANT` permissions
+
+### Documentation
+
+- **Specification**: [specs/020-fix-cloudrun-db-auth/spec.md](specs/020-fix-cloudrun-db-auth/spec.md)
+- **Implementation Plan**: [specs/020-fix-cloudrun-db-auth/plan.md](specs/020-fix-cloudrun-db-auth/plan.md)
+- **Testing Guide**: [specs/020-fix-cloudrun-db-auth/quickstart.md](specs/020-fix-cloudrun-db-auth/quickstart.md)
+- **Implementation Checklist**: [specs/020-fix-cloudrun-db-auth/checklists/implementation.md](specs/020-fix-cloudrun-db-auth/checklists/implementation.md)
+
+<!-- MANUAL ADDITIONS START (preserved from above) -->
 
 ## Claude Code CLI Integration
 

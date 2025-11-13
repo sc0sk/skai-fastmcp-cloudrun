@@ -1,0 +1,25 @@
+# Chronological Spec Renumbering Map
+# Format: NEW_NUM OLD_NAME → NEW_NAME
+
+001 020-chatgpt-devmode-enhancements → 001-chatgpt-devmode-enhancements
+002 002-real-hansard-ingestion → 002-real-hansard-ingestion (no change)
+003 003-service-account-separation → 003-service-account-separation (no change)
+004 004-search-fetch-mcp-tools → 004-search-fetch-mcp-tools (no change)
+005 005-chatgpt-integration → 005-chatgpt-integration (no change)
+006 006-progress-reporting → 006-progress-reporting (no change)
+007 007-debug-logging → 007-debug-logging (no change)
+008 008-error-logging-middleware → 008-error-logging-middleware (no change)
+009 009-gemini-cli-integration → 009-gemini-cli-integration (no change)
+010 010-token-verification → 010-token-verification (no change)
+011 011-mcp-oauth21-security → 011-mcp-oauth21-security (no change)
+012 012-admin-markdown-ingestion → 012-admin-markdown-ingestion (no change)
+013 013-bulk-markdown-ingestion → 013-bulk-markdown-ingestion (no change)
+014 012-fix-local-database → 014-fix-local-database
+015 014-update-langchain-1-0 → 015-update-langchain-1-0
+016 015-langchain-1.0-community-pgvector → 016-langchain-1.0-community-pgvector
+017 016-langchain-postgres-upgrade → 017-langchain-postgres-upgrade
+018 017-fresh-postgres-population → 018-fresh-postgres-population
+019 018-mcp-tools-quality-improvements → 019-mcp-tools-quality-improvements
+020 019-fix-cloudrun-db-auth → 020-fix-cloudrun-db-auth
+021 021-upgrade-fastmcp-2 → 021-upgrade-fastmcp-2 (no change)
+022 001-fastmcp-oauth-persistence → 022-fastmcp-oauth-persistence

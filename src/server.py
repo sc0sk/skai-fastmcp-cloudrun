@@ -90,25 +90,30 @@ if os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() != "true":
     if os.getenv("FASTMCP_SERVER_AUTH") == "fastmcp.server.auth.providers.github.GitHubProvider":
         try:
             from fastmcp.server.auth.providers.github import GitHubProvider
-            from src.auth.memory_storage import MemoryKVStorage
             import logging
 
             # Get logger for this module
             logger = logging.getLogger(__name__)
 
-            # Use in-memory storage for OAuth client registrations
-            # Simple, reliable, works for single-instance Cloud Run deployments
-            # (PostgreSQL password auth has proven problematic; IAM auth requires complex setup)
-            client_storage = MemoryKVStorage()
-            logger.info("OAuth client storage initialized", extra={"storage_type": "memory", "backend": "MemoryKVStorage"})
-            
             # GitHubProvider automatically loads configuration from environment variables:
             # FASTMCP_SERVER_AUTH_GITHUB_CLIENT_ID
             # FASTMCP_SERVER_AUTH_GITHUB_CLIENT_SECRET
             # FASTMCP_SERVER_AUTH_GITHUB_BASE_URL
-            auth_provider = GitHubProvider(client_storage=client_storage)
-            print("✅ GitHub OAuth authentication enabled (in-memory client storage)")
-            logger.info("GitHub OAuth authentication enabled", extra={"client_storage": "in-memory"})
+            #
+            # FastMCP 2.13+ supports custom client_storage parameter for persistent OAuth storage.
+            # We use Firestore to persist OAuth clients across Cloud Run deployments.
+
+            # Use Firestore OAuth storage (serverless, persistent, no event loop issues)
+            from src.auth.firestore_oauth_storage import FirestoreOAuthStorage
+
+            oauth_storage = FirestoreOAuthStorage(
+                project_id=os.getenv('GCP_PROJECT_ID'),
+                collection_name='oauth_clients'
+            )
+
+            auth_provider = GitHubProvider(client_storage=oauth_storage)
+            print("✅ GitHub OAuth authentication enabled (Firestore storage - persistent)")
+            logger.info("GitHub OAuth authentication enabled", extra={"client_storage": "firestore"})
         except ImportError as e:
             print(f"⚠️  Warning: GitHub OAuth provider not available: {e}")
     else:
@@ -118,6 +123,8 @@ else:
 
 # Create FastMCP server instance with authentication and lifespan
 mcp = FastMCP("Hansard MCP Server", auth=auth_provider, lifespan=lifespan)
+
+# GitHub access control middleware will be added after app is created
 
 # Register search tool with ChatGPT Developer Mode enhancements
 # Note: icon parameter not supported in FastMCP 2.12.5, icons stored in metadata for future use
@@ -174,7 +181,6 @@ print("   📝 ingest_hansard_speech [write operation with progress reporting]")
 # print("   📁 ingest_markdown_directory [admin-only bulk directory ingestion]")
 
 # Expose ASGI app for uvicorn (Cloud Run deployment)
-# FastMCP's http_app() method returns the Starlette ASGI application
 app = mcp.http_app()
 
 # Add CORS middleware to allow OAuth flows from browser-based clients
@@ -187,37 +193,41 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-# Add OAuth 2.0 Protected Resource Metadata endpoint (2025-DRAFT-v2)
-# See: https://datatracker.ietf.org/doc/draft-ietf-oauth-resource-metadata/
+# Add GitHub access control middleware (restrict to allowed usernames/emails)
+if auth_provider and not os.getenv("DANGEROUSLY_OMIT_AUTH", "false").lower() == "true":
+    from src.auth.github_middleware import GitHubAccessControlMiddleware
+    app.add_middleware(GitHubAccessControlMiddleware)
+    print("✅ GitHub access control middleware enabled")
+else:
+    print("⚠️  GitHub access control middleware not enabled (no auth provider or DANGEROUSLY_OMIT_AUTH=true)")
+
+# NOTE: All OAuth endpoints (/.well-known/oauth-authorization-server, /oauth/*, /register)
+# are automatically provided by FastMCP's GitHubProvider
+# We manually add /.well-known/oauth-protected-resource (RFC 9728) for MCP spec compliance
+
 @app.route("/.well-known/oauth-protected-resource", methods=["GET"])  # type: ignore[misc]
-async def oauth_protected_resource_metadata(request: Request):
-    """Expose OAuth Protected Resource Metadata for MCP Inspector.
-
-    Returns a minimal metadata document advertising this resource server and
-    its associated authorization server (same base URL in our deployment).
+async def oauth_protected_resource(request: Request):
     """
-    # Force HTTPS for production (Cloud Run is always HTTPS externally, even if HTTP internally)
-    base_url = os.getenv("FASTMCP_SERVER_AUTH_GITHUB_BASE_URL", "")
-    if not base_url:
-        scheme = "https" if request.headers.get("x-forwarded-proto") == "https" or os.getenv("PORT") else request.url.scheme
-        base_url = scheme + "://" + request.url.netloc
-    
-    # Normalize base URL: remove trailing slash for consistent URL construction
-    base_url = base_url.rstrip('/')
-    
-    # MCP HTTP base path (resource) – FastMCP HTTP endpoints are served from the same origin
-    resource_url = f"{base_url}/mcp"
-    body = {
-        "resource": resource_url,
-        "authorization_servers": [
-            f"{base_url}/"
-        ],
-        # Optional: align with AS metadata already exposed at
-        # /.well-known/oauth-authorization-server on the same origin.
-    }
-    return JSONResponse(body)
+    OAuth 2.0 Protected Resource Metadata (RFC 9728).
+    Required by MCP specification 2025-06-18.
+    """
+    # Get base URL from environment or headers
+    base_url = os.getenv('FASTMCP_SERVER_AUTH_GITHUB_BASE_URL', 'https://hansard-mcp-server-666924716777.us-central1.run.app')
 
-# (Route registered via decorator above) OAuth 2.0 Protected Resource Metadata
+    # Detect protocol from proxy headers (Cloud Run uses SSL termination)
+    proto = request.headers.get('X-Forwarded-Proto', 'https')
+    host = request.headers.get('Host', base_url.replace('https://', '').replace('http://', ''))
+    resource_url = f"{proto}://{host}"
+
+    metadata = {
+        "resource": resource_url,
+        "authorization_servers": [resource_url],
+        "scopes_supported": ["user"],
+        "bearer_methods_supported": ["header"],
+        "resource_documentation": f"{resource_url}/docs",
+    }
+
+    return JSONResponse(metadata)
 
 # DEBUG endpoint: IAM user detection (temporary, remove after debugging)
 @app.route("/debug/iam-user", methods=["GET"])  # type: ignore[misc]

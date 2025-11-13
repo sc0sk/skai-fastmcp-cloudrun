@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import date
 from fastmcp import Context
 
-tools.ingest import ingest_hansard_speech
-storage.vector_store import VectorStoreService
-storage.metadata_store import MetadataStore
-models.speech import SpeechMetadata
+from tools.ingest import ingest_hansard_speech
+from storage.vector_store import VectorStoreService
+from storage.metadata_store import MetadataStore
+from models.speech import SpeechMetadata
 
 
 @pytest.fixture

@@ -144,6 +144,11 @@ class CloudSQLEngine:
         self._user = user
         self._password = password
 
+        # IAM detection tracking (for testing/debugging)
+        self._detected_iam_user: Optional[str] = None
+        self._detection_method: Optional[str] = None
+        self._iam_valid: bool = False
+
         def getconn():
             """Create connection via Cloud SQL Connector.
             
@@ -189,6 +194,10 @@ class CloudSQLEngine:
                         response = requests.get(metadata_url, headers=headers, timeout=1)
                         if response.status_code == 200:
                             iam_user = response.text.strip()
+                            # Track detection for testing/debugging
+                            self._detected_iam_user = iam_user
+                            self._detection_method = "METADATA_SERVICE"
+                            self._iam_valid = bool(iam_user and '@' in iam_user and iam_user != "default")
                     except Exception:
                         pass
 
@@ -202,10 +211,28 @@ class CloudSQLEngine:
                             # Filter out "default" placeholder
                             if email and email != "default":
                                 iam_user = email
+                                # Track detection
+                                self._detected_iam_user = iam_user
+                                self._detection_method = "ADC_CREDENTIALS"
+                                self._iam_valid = bool(iam_user and '@' in iam_user)
+                            elif email == "default":
+                                # Track failed detection (placeholder)
+                                self._detected_iam_user = "default"
+                                self._detection_method = "ADC_CREDENTIALS"
+                                self._iam_valid = False
                         elif hasattr(credentials, '_service_account_email'):
                             email = credentials._service_account_email
                             if email and email != "default":
                                 iam_user = email
+                                # Track detection
+                                self._detected_iam_user = iam_user
+                                self._detection_method = "ADC_CREDENTIALS"
+                                self._iam_valid = bool(iam_user and '@' in iam_user)
+                            elif email == "default":
+                                # Track failed detection (placeholder)
+                                self._detected_iam_user = "default"
+                                self._detection_method = "ADC_CREDENTIALS"
+                                self._iam_valid = False
                     except Exception:
                         pass
 
@@ -220,18 +247,36 @@ class CloudSQLEngine:
                         ).strip()
                         if result and '@' in result:
                             iam_user = result
+                            # Track detection
+                            self._detected_iam_user = iam_user
+                            self._detection_method = "GCLOUD_CONFIG"
+                            self._iam_valid = bool(iam_user and '@' in iam_user)
                     except Exception:
                         pass
 
                 # Final fallback: use postgres user (legacy default, requires password)
                 if not iam_user:
                     iam_user = "postgres"
+                    # Track fallback
+                    self._detected_iam_user = iam_user
+                    self._detection_method = "FALLBACK"
+                    self._iam_valid = False
 
                 # For Cloud SQL IAM DB Auth with PostgreSQL:
-                # - Database user must be the full IAM principal email (service account)
+                # - Database user must be the service account ID WITHOUT .gserviceaccount.com suffix
+                #   (e.g., "666924716777-compute@developer" not "...@developer.gserviceaccount.com")
                 # - Password must be a fresh OAuth2 access token (manual IAM auth)
                 # - Driver must be pg8000 (connector handles secure networking)
-                kwargs["user"] = iam_user
+                #
+                # Strip .gserviceaccount.com suffix from service account emails for database username
+                db_user = iam_user
+                if ".gserviceaccount.com" in iam_user:
+                    db_user = iam_user.replace(".gserviceaccount.com", "")
+                    logging.getLogger(__name__).info(
+                        f"Stripped .gserviceaccount.com suffix for database username: {iam_user} → {db_user}"
+                    )
+
+                kwargs["user"] = db_user
 
                 # Manually fetch an OAuth2 access token and use it as the password.
                 # This avoids relying on connector-side enable_iam_auth behavior and
@@ -262,6 +307,9 @@ class CloudSQLEngine:
                     "driver": driver,
                     "iam_auth": bool(kwargs.get("enable_iam_auth", False) or bool(kwargs.get("password"))),
                     "user_present": bool(kwargs.get("user")),
+                    "detected_iam_user": self._detected_iam_user,
+                    "detection_method": self._detection_method,
+                    "iam_valid": self._iam_valid,
                 },
             )
 
@@ -286,15 +334,56 @@ class CloudSQLEngine:
     @property
     def engine(self) -> Engine:
         """Get the managed SQLAlchemy engine instance.
-        
+
         Returns:
             Engine: SQLAlchemy 2.x Engine ready for use
-        
+
         Usage:
             >>> with engine_mgr.engine.connect() as conn:
             ...     result = conn.execute(text("SELECT 1"))
         """
         return self._engine
+
+    @property
+    def detected_iam_user(self) -> Optional[str]:
+        """Get the detected IAM user (service account email).
+
+        Returns:
+            Service account email if detected, None if not yet detected
+
+        Example:
+            >>> engine_mgr.detected_iam_user
+            '666924716777-compute@developer.gserviceaccount.com'
+        """
+        return self._detected_iam_user
+
+    @property
+    def detection_method(self) -> Optional[str]:
+        """Get the method used to detect IAM user.
+
+        Returns:
+            One of: "METADATA_SERVICE", "ADC_CREDENTIALS", "GCLOUD_CONFIG", "FALLBACK"
+            None if detection hasn't occurred yet
+
+        Example:
+            >>> engine_mgr.detection_method
+            'METADATA_SERVICE'
+        """
+        return self._detection_method
+
+    @property
+    def iam_valid(self) -> bool:
+        """Check if detected IAM user is valid for authentication.
+
+        Returns:
+            True if detected user is valid (non-empty, not "default", contains "@")
+            False otherwise
+
+        Example:
+            >>> engine_mgr.iam_valid
+            True
+        """
+        return self._iam_valid
 
     def close(self) -> None:
         """Close engine and underlying Cloud SQL Connector.
